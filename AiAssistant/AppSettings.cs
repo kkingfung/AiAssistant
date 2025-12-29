@@ -1,0 +1,216 @@
+using System;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace AiAssistant
+{
+    /// <summary>
+    /// アプリケーション設定を管理するクラス
+    /// appsettings.jsonから設定を読み込み、APIキーや各種設定を提供します
+    /// </summary>
+    public sealed class AppSettings
+    {
+        private static AppSettings? _instance;
+        private static readonly object _lock = new();
+
+        [JsonPropertyName("OpenAI")]
+        public OpenAISettings OpenAI { get; set; } = new();
+
+        [JsonPropertyName("Google")]
+        public GoogleSettings Google { get; set; } = new();
+
+        [JsonPropertyName("LocalLlm")]
+        public LocalLlmSettings LocalLlm { get; set; } = new();
+
+        [JsonPropertyName("Assistant")]
+        public AssistantSettings Assistant { get; set; } = new();
+
+        /// <summary>
+        /// シングルトンインスタンスを取得
+        /// </summary>
+        public static AppSettings Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    lock (_lock)
+                    {
+                        _instance ??= Load();
+                    }
+                }
+                return _instance;
+            }
+        }
+
+        /// <summary>
+        /// appsettings.jsonから設定を読み込みます
+        /// </summary>
+        private static AppSettings Load()
+        {
+            var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+
+            if (!File.Exists(settingsPath))
+            {
+                // 設定ファイルが存在しない場合はデフォルト値を返す
+                return new AppSettings();
+            }
+
+            try
+            {
+                var json = File.ReadAllText(settingsPath);
+                var settings = JsonSerializer.Deserialize<AppSettings>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    ReadCommentHandling = JsonCommentHandling.Skip,
+                    AllowTrailingCommas = true
+                });
+
+                return settings ?? new AppSettings();
+            }
+            catch (Exception ex)
+            {
+                // 読み込みエラーの場合はデフォルト値を返す
+                System.Diagnostics.Debug.WriteLine($"設定ファイルの読み込みに失敗しました: {ex.Message}");
+                return new AppSettings();
+            }
+        }
+
+        /// <summary>
+        /// 設定を保存します
+        /// </summary>
+        public void Save()
+        {
+            var settingsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+
+            try
+            {
+                var json = JsonSerializer.Serialize(this, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = null
+                });
+
+                File.WriteAllText(settingsPath, json);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"設定ファイルの保存に失敗しました: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 設定をリロードします
+        /// </summary>
+        public static void Reload()
+        {
+            lock (_lock)
+            {
+                _instance = Load();
+            }
+        }
+    }
+
+    /// <summary>
+    /// OpenAI API設定
+    /// </summary>
+    public sealed class OpenAISettings
+    {
+        [JsonPropertyName("ApiKey")]
+        public string ApiKey { get; set; } = string.Empty;
+
+        [JsonPropertyName("Model")]
+        public string Model { get; set; } = "gpt-4";
+
+        [JsonPropertyName("MaxTokens")]
+        public int MaxTokens { get; set; } = 2000;
+
+        [JsonPropertyName("Temperature")]
+        public double Temperature { get; set; } = 0.7;
+
+        /// <summary>
+        /// APIキーが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey) && ApiKey != "YOUR_OPENAI_API_KEY_HERE";
+    }
+
+    /// <summary>
+    /// Google API設定
+    /// </summary>
+    public sealed class GoogleSettings
+    {
+        [JsonPropertyName("ApiKey")]
+        public string ApiKey { get; set; } = string.Empty;
+
+        [JsonPropertyName("ClientId")]
+        public string ClientId { get; set; } = string.Empty;
+
+        [JsonPropertyName("ClientSecret")]
+        public string ClientSecret { get; set; } = string.Empty;
+
+        /// <summary>
+        /// APIキーが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey) && ApiKey != "YOUR_GOOGLE_API_KEY_HERE";
+    }
+
+    /// <summary>
+    /// アシスタント設定
+    /// </summary>
+    public sealed class AssistantSettings
+    {
+        [JsonPropertyName("CharacterModelPath")]
+        public string CharacterModelPath { get; set; } = string.Empty;
+
+        [JsonPropertyName("WindowWidth")]
+        public double WindowWidth { get; set; } = 280;
+
+        [JsonPropertyName("WindowHeight")]
+        public double WindowHeight { get; set; } = 400;
+
+        [JsonPropertyName("AspectRatio")]
+        public double AspectRatio { get; set; } = 0.7;
+
+        [JsonPropertyName("SaveWindowPosition")]
+        public bool SaveWindowPosition { get; set; } = true;
+
+        [JsonPropertyName("LastPositionX")]
+        public double LastPositionX { get; set; } = 100;
+
+        [JsonPropertyName("LastPositionY")]
+        public double LastPositionY { get; set; } = 100;
+    }
+
+    /// <summary>
+    /// ローカルLLM設定
+    /// </summary>
+    public sealed class LocalLlmSettings
+    {
+        [JsonPropertyName("Enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("Provider")]
+        public string Provider { get; set; } = "Ollama"; // "Ollama", "LLamaSharp", "ONNX"
+
+        [JsonPropertyName("Endpoint")]
+        public string Endpoint { get; set; } = "http://localhost:11434";
+
+        [JsonPropertyName("Model")]
+        public string Model { get; set; } = "phi3:mini";
+
+        [JsonPropertyName("ModelPath")]
+        public string ModelPath { get; set; } = string.Empty;
+
+        [JsonPropertyName("MaxTokens")]
+        public int MaxTokens { get; set; } = 500;
+
+        [JsonPropertyName("PreferLocal")]
+        public bool PreferLocal { get; set; } = true;
+
+        /// <summary>
+        /// ローカルLLMが有効で、ローカル優先設定かどうか
+        /// </summary>
+        public bool ShouldUseLocal => Enabled && PreferLocal;
+    }
+}

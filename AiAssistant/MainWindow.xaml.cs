@@ -1,19 +1,21 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
+using System.Windows.Documents;
 
 namespace AiAssistant
 {
     public partial class MainWindow : Window
     {
         private bool _isClickThrough;
-
-        // 用於平滑 resize：記住 drag 開始時的寬高
-        private double _resizeStartWidth;
-        private double _resizeStartHeight;
+        private bool _isChatOpen;
+        private bool _isWaitingForResponse;
 
         private const int HOTKEY_ID = 0xB001;
         private const uint MOD_ALT = 0x0001;
@@ -21,19 +23,68 @@ namespace AiAssistant
         private const int WM_HOTKEY = 0x0312;
         private HwndSource? _hwndSource;
 
+        private AssistantViewModel? _viewModel;
+        private Button? _sendButton;
+
         public MainWindow()
         {
             InitializeComponent();
-            DataContext = new AssistantViewModel(new MockAiService());
 
             SourceInitialized += OnSourceInitialized;
             Loaded += OnLoaded;
             Closed += OnClosed;
         }
 
-        private void OnLoaded(object? sender, RoutedEventArgs e)
+        /// <summary>
+        /// AIサービスを非同期で初期化します
+        /// </summary>
+        private async Task InitializeAiServiceAsync()
         {
-            // 不做縮放調整：UI 保持固定大小並置中
+            try
+            {
+                Console.WriteLine("[Init] AIサービス初期化開始...");
+                var (aiService, serviceType) = await AiServiceFactory.CreateAsync();
+
+                Console.WriteLine($"[Init] サービスタイプ: {serviceType}");
+                Console.WriteLine($"[Init] サービスクラス: {aiService.GetType().Name}");
+
+                _viewModel = new AssistantViewModel(aiService);
+                DataContext = _viewModel;
+
+                // サービスタイプに応じたメッセージを表示
+                string message = serviceType switch
+                {
+                    var s when s.StartsWith("Ollama") => $"ローカルLLM ({serviceType}) を使用しています。",
+                    "ChatGPT (Cloud)" => "ChatGPT (クラウド) を使用しています。",
+                    "Mock (Demo)" => "MockAiService (デモ) を使用しています。設定を確認してください。",
+                    _ => $"{serviceType} を使用しています。"
+                };
+
+                ShowTransientMessage(message, 3000);
+                Console.WriteLine($"[Init] メッセージ: {message}");
+                System.Diagnostics.Debug.WriteLine($"AIサービス初期化完了: {serviceType}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Init] エラー: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"AIサービス初期化エラー: {ex.Message}");
+
+                // フォールバック
+                _viewModel = new AssistantViewModel(new MockAiService());
+                DataContext = _viewModel;
+                ShowTransientMessage("AIサービスの初期化に失敗しました。MockAiServiceを使用します。", 3000);
+            }
+        }
+
+        private async void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            // ウィンドウを画面右下に配置
+            var workArea = SystemParameters.WorkArea;
+            Left = workArea.Right - Width - 10;
+            Top = workArea.Bottom - Height - 10;
+
+            // AIサービスを非同期で初期化
+            await InitializeAiServiceAsync();
         }
 
         private void OnSourceInitialized(object? sender, EventArgs e)
@@ -46,10 +97,7 @@ namespace AiAssistant
             if (_hwndSource != null)
                 _hwndSource.AddHook(WndProc);
 
-            // 建議視窗不搶焦（可選）
-            ClickThroughHelper.SetNoActivate(this, true);
-
-            // 初始 click-through 關閉
+            // 初期状態：click-through無効（通常のウィンドウとして動作）
             _isClickThrough = false;
             ClickThroughHelper.SetClickThrough(this, _isClickThrough);
 
@@ -65,6 +113,18 @@ namespace AiAssistant
 
             var helper = new WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_ID);
+        }
+
+        // 閉じるボタン
+        private void OnCloseButtonClick(object sender, RoutedEventArgs e)
+        {
+            Application.Current.Shutdown();
+        }
+
+        // チャットボタン
+        private void OnChatButtonClick(object sender, RoutedEventArgs e)
+        {
+            ToggleChatBalloon();
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -98,29 +158,175 @@ namespace AiAssistant
             return IntPtr.Zero;
         }
 
-        // 記住 drag 開始的寬高
-        private void ResizeThumb_DragStarted(object sender, DragStartedEventArgs e)
+        // チャットバルーンの表示/非表示を切り替え
+        private void ToggleChatBalloon()
         {
-            _resizeStartWidth = Width;
-            _resizeStartHeight = Height;
+            _isChatOpen = !_isChatOpen;
+            ChatBalloon.Visibility = _isChatOpen ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_isChatOpen)
+            {
+                // チャットを開く時はクリックスルーを無効化
+                if (_isClickThrough)
+                {
+                    _isClickThrough = false;
+                    ClickThroughHelper.SetClickThrough(this, false);
+                }
+
+                // 送信ボタンの参照を取得（初回のみ）
+                if (_sendButton == null)
+                {
+                    _sendButton = SendButton;
+                }
+
+                // ウィンドウをアクティブにしてフォーカスを設定
+                this.Activate();
+                ChatInputBox.Focus();
+                Keyboard.Focus(ChatInputBox);
+            }
         }
 
-        // 自由比例 resize（起始寬高 + delta）
-        private void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
+        // チャット閉じるボタン
+        private void OnCloseChatClick(object sender, RoutedEventArgs e)
         {
-            double minW = MinWidth;
-            double minH = MinHeight;
-
-            double newW = Math.Max(minW, _resizeStartWidth + e.HorizontalChange);
-            double newH = Math.Max(minH, _resizeStartHeight + e.VerticalChange);
-
-            Width = newW;
-            Height = newH;
+            _isChatOpen = false;
+            ChatBalloon.Visibility = Visibility.Collapsed;
         }
 
-        private void ResizeThumb_DragCompleted(object sender, DragCompletedEventArgs e)
+        // メッセージ送信ボタン
+        private async void OnSendMessageClick(object sender, RoutedEventArgs e)
         {
-            // 可在此儲存最終尺寸或做其他後處理
+            await SendChatMessageAsync();
+        }
+
+        // Enterキーでメッセージ送信
+        private async void OnChatInputKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                e.Handled = true;
+                await SendChatMessageAsync();
+            }
+        }
+
+        // チャットメッセージを送信
+        private async Task SendChatMessageAsync()
+        {
+            var message = ChatInputBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(message) || _viewModel == null || _isWaitingForResponse)
+            {
+                return;
+            }
+
+            // 送信中状態に設定
+            _isWaitingForResponse = true;
+            UpdateSendButtonState();
+
+            // 入力フィールドをクリア
+            ChatInputBox.Text = string.Empty;
+
+            // ユーザーメッセージを表示
+            AddChatMessage(message, isUser: true);
+
+            // AIレスポンスを取得（ストリーミング）
+            var responseTextBlock = AddChatMessage("入力中...", isUser: false);
+
+            // ViewModelのResponseTextをリアルタイムで表示に反映（イベントハンドラを先に登録）
+            PropertyChangedEventHandler handler = (s, e) =>
+            {
+                if (e.PropertyName == nameof(AssistantViewModel.ResponseText))
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        responseTextBlock.Text = _viewModel.ResponseText;
+                        ScrollChatToBottom();
+                    });
+                }
+            };
+
+            try
+            {
+                _viewModel.PropertyChanged += handler;
+                await _viewModel.StreamPromptAsync(message);
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    responseTextBlock.Text = $"エラー: {ex.Message}";
+                });
+            }
+            finally
+            {
+                _viewModel.PropertyChanged -= handler;
+
+                // 送信完了状態に設定
+                _isWaitingForResponse = false;
+                UpdateSendButtonState();
+            }
+        }
+
+        // 送信ボタンの状態を更新
+        private void UpdateSendButtonState()
+        {
+            if (_sendButton != null)
+            {
+                _sendButton.IsEnabled = !_isWaitingForResponse;
+                _sendButton.Opacity = _isWaitingForResponse ? 0.5 : 1.0;
+            }
+        }
+
+        // チャットメッセージをUIに追加
+        private TextBlock AddChatMessage(string message, bool isUser)
+        {
+            var messageContainer = new Border
+            {
+                Margin = new Thickness(0, 0, 0, 8),
+                Padding = new Thickness(10, 6, 10, 6),
+                CornerRadius = new CornerRadius(8),
+                Background = isUser ? new SolidColorBrush(Color.FromRgb(30, 144, 255)) : new SolidColorBrush(Color.FromRgb(240, 240, 240)),
+                HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left,
+                MaxWidth = 280
+            };
+
+            var textBlock = new TextBlock
+            {
+                Text = message,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = isUser ? Brushes.White : Brushes.Black,
+                FontSize = 13
+            };
+
+            messageContainer.Child = textBlock;
+            ChatMessagesPanel.Children.Add(messageContainer);
+
+            ScrollChatToBottom();
+
+            return textBlock;
+        }
+
+        // チャットを最下部までスクロール
+        private void ScrollChatToBottom()
+        {
+            ChatScrollViewer.ScrollToBottom();
+        }
+
+        // 一時的なメッセージを表示
+        private async void ShowTransientMessage(string message, int durationMs)
+        {
+            try
+            {
+                TransientMessage.Text = message;
+                TransientBorder.Visibility = Visibility.Visible;
+
+                await Task.Delay(durationMs).ConfigureAwait(true);
+
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
+            catch
+            {
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
         }
 
         // 測試按鈕處理：顯示暫態文字 3 秒（UI 不阻塞）

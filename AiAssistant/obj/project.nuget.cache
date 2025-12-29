@@ -1,8 +1,18 @@
 {
   "version": 2,
-  "dgSpecHash": "7lNbNoz4Cts=",
+  "dgSpecHash": "zO1DtaRuHrI=",
   "success": true,
   "projectFilePath": "D:\\PersonalGameDev\\AiAssistant\\AiAssistant\\AiAssistant.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\sun\\.nuget\\packages\\microsoft.extensions.ai.abstractions\\9.10.0\\microsoft.extensions.ai.abstractions.9.10.0.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\ollamasharp\\5.4.8\\ollamasharp.5.4.8.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\openai\\2.1.0\\openai.2.1.0.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\system.clientmodel\\1.2.1\\system.clientmodel.1.2.1.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\system.diagnostics.diagnosticsource\\6.0.1\\system.diagnostics.diagnosticsource.6.0.1.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\system.memory.data\\6.0.0\\system.memory.data.6.0.0.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\6.0.0\\system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\system.text.encodings.web\\6.0.0\\system.text.encodings.web.6.0.0.nupkg.sha512",
+    "C:\\Users\\sun\\.nuget\\packages\\system.text.json\\6.0.10\\system.text.json.6.0.10.nupkg.sha512"
+  ],
   "logs": []
 }
