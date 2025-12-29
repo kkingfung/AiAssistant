@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Documents;
+using WpfAnimatedGif;
 
 namespace AiAssistant
 {
@@ -25,6 +26,7 @@ namespace AiAssistant
 
         private AssistantViewModel? _viewModel;
         private Button? _sendButton;
+        private CharacterAnimationController? _animationController;
 
         public MainWindow()
         {
@@ -83,8 +85,111 @@ namespace AiAssistant
             Left = workArea.Right - Width - 10;
             Top = workArea.Bottom - Height - 10;
 
+            // アバター画像を読み込み
+            LoadAvatar();
+
+            // キャラクターアニメーションを初期化
+            InitializeCharacterAnimation();
+
+            // テーマを適用
+            ApplyTheme();
+
             // AIサービスを非同期で初期化
             await InitializeAiServiceAsync();
+        }
+
+        /// <summary>
+        /// キャラクターアニメーションを初期化します
+        /// </summary>
+        private void InitializeCharacterAnimation()
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var animationsFolder = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                settings.CharacterAnimationsFolder
+            );
+
+            try
+            {
+                // CharacterAnimationControllerを作成
+                _animationController = new CharacterAnimationController(
+                    AvatarImage,
+                    animationsFolder,
+                    settings.SelectedPet
+                );
+
+                // 切り替え間隔を設定
+                _animationController.SwitchIntervalMs = settings.AnimationSwitchIntervalSeconds * 1000;
+
+                // アニメーション再生を開始
+                _animationController.Start();
+
+                // AvatarImageを表示、プレースホルダーを非表示
+                AvatarImage.Visibility = Visibility.Visible;
+                PlaceholderViewbox.Visibility = Visibility.Collapsed;
+
+                Console.WriteLine($"[CharacterAnimation] {settings.SelectedPet} アニメーションシステムを初期化しました");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CharacterAnimation] 初期化エラー: {ex.Message}");
+                // エラー時はプレースホルダーを表示
+                AvatarImage.Visibility = Visibility.Collapsed;
+                PlaceholderViewbox.Visibility = Visibility.Visible;
+            }
+        }
+
+        /// <summary>
+        /// アバター画像を読み込みます（静止画用・廃止予定）
+        /// </summary>
+        private void LoadAvatar()
+        {
+            // キャラクターアニメーションシステムを使用するため、この機能は非推奨
+            // 必要に応じて静止画を表示する場合のみ使用
+            var settings = AppSettings.Instance.Assistant;
+
+            if (settings.HasAvatar && _animationController == null)
+            {
+                try
+                {
+                    var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(settings.AvatarImagePath, UriKind.Absolute);
+                    bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+
+                    AvatarImage.Source = bitmap;
+                    AvatarImage.Visibility = Visibility.Visible;
+                    PlaceholderViewbox.Visibility = Visibility.Collapsed;
+
+                    Console.WriteLine($"[Avatar] アバター画像を読み込みました: {settings.AvatarImagePath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Avatar] アバター画像の読み込みに失敗: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// テーマを適用します
+        /// </summary>
+        private void ApplyTheme()
+        {
+            var settings = AppSettings.Instance.Assistant;
+
+            if (settings.IsDarkTheme)
+            {
+                // ダークテーマの色
+                ChatBalloon.Background = new SolidColorBrush(Color.FromArgb(245, 30, 30, 30));
+                TransientBorder.Background = new SolidColorBrush(Color.FromArgb(220, 50, 50, 50));
+            }
+            else
+            {
+                // ライトテーマの色（デフォルト）
+                ChatBalloon.Background = new SolidColorBrush(Color.FromArgb(240, 255, 255, 255));
+                TransientBorder.Background = new SolidColorBrush(Color.FromArgb(220, 0, 0, 0));
+            }
         }
 
         private void OnSourceInitialized(object? sender, EventArgs e)
@@ -113,6 +218,9 @@ namespace AiAssistant
 
             var helper = new WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_ID);
+
+            // アニメーションコントローラーをクリーンアップ
+            _animationController?.Dispose();
         }
 
         // 閉じるボタン
@@ -125,6 +233,170 @@ namespace AiAssistant
         private void OnChatButtonClick(object sender, RoutedEventArgs e)
         {
             ToggleChatBalloon();
+        }
+
+        // ペット選択ボタン
+        private void OnPetSelectorButtonClick(object sender, RoutedEventArgs e)
+        {
+            TogglePetSelector();
+        }
+
+        // ペット選択ポップアップの表示/非表示を切り替え
+        private void TogglePetSelector()
+        {
+            bool isOpen = PetSelectorPopup.Visibility == Visibility.Visible;
+            PetSelectorPopup.Visibility = isOpen ? Visibility.Collapsed : Visibility.Visible;
+
+            if (!isOpen)
+            {
+                // 開く時はチャットを閉じる
+                ChatBalloon.Visibility = Visibility.Collapsed;
+                _isChatOpen = false;
+
+                // クリックスルーを無効化
+                if (_isClickThrough)
+                {
+                    _isClickThrough = false;
+                    ClickThroughHelper.SetClickThrough(this, false);
+                }
+
+                // 現在選択されているペットをハイライト
+                HighlightSelectedPet();
+            }
+        }
+
+        // ペット選択ポップアップを閉じる
+        private void OnClosePetSelectorClick(object sender, RoutedEventArgs e)
+        {
+            PetSelectorPopup.Visibility = Visibility.Collapsed;
+        }
+
+        // ペットが選択された時の処理
+        private void OnPetSelected(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string petType)
+            {
+                ChangePet(petType);
+                PetSelectorPopup.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        // ペットを変更する
+        private void ChangePet(string petType)
+        {
+            try
+            {
+                // 設定を更新
+                var settings = AppSettings.Instance.Assistant;
+                settings.SelectedPet = petType;
+                AppSettings.Instance.Save();
+
+                // 古いアニメーションコントローラーを完全に停止・破棄
+                if (_animationController != null)
+                {
+                    _animationController.Stop();
+                    _animationController.Dispose();
+                    _animationController = null;
+                }
+
+                // Image コントロールをクリア
+                WpfAnimatedGif.ImageBehavior.SetAnimatedSource(AvatarImage, null);
+                AvatarImage.Source = null;
+                AvatarImage.Visibility = Visibility.Collapsed;
+
+                // 強制的にUIを更新
+                AvatarImage.UpdateLayout();
+
+                // 新しいペットでアニメーションを再初期化
+                InitializeCharacterAnimation();
+
+                // メッセージを表示
+                string petName = petType switch
+                {
+                    "Cat" => "🐱 Cat",
+                    "Crab" => "🦀 Crab",
+                    "Dragon" => "🐉 Dragon",
+                    "Frog" => "🐸 Frog",
+                    "Shark" => "🦈 Shark",
+                    "Snake" => "🐍 Snake",
+                    "Random" => "🎲 Random",
+                    _ => petType
+                };
+
+                ShowTransientMessage($"{petName} に変更しました！", 2000);
+                Console.WriteLine($"[PetSelector] ペットを変更: {petType}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PetSelector] ペット変更エラー: {ex.Message}");
+                ShowTransientMessage("ペットの変更に失敗しました", 2000);
+            }
+        }
+
+        // 現在選択されているペットをハイライト
+        private void HighlightSelectedPet()
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var selectedPet = settings.SelectedPet;
+
+            // すべてのボタンをリセット
+            ResetPetButtonStyles();
+
+            // 選択されているペットのボタンをハイライト
+            Button? selectedButton = selectedPet switch
+            {
+                "Cat" => PetCatButton,
+                "Crab" => PetCrabButton,
+                "Dragon" => PetDragonButton,
+                "Frog" => PetFrogButton,
+                "Shark" => PetSharkButton,
+                "Snake" => PetSnakeButton,
+                "Random" => PetRandomButton,
+                _ => null
+            };
+
+            if (selectedButton != null && selectedButton.Parent is Border border)
+            {
+                border.Background = new SolidColorBrush(Color.FromRgb(147, 112, 219)); // Purple
+                border.BorderBrush = new SolidColorBrush(Color.FromRgb(138, 43, 226));
+                border.BorderThickness = new Thickness(2);
+
+                if (selectedButton.Content is TextBlock textBlock)
+                {
+                    textBlock.Foreground = Brushes.White;
+                }
+            }
+        }
+
+        // ペットボタンのスタイルをリセット
+        private void ResetPetButtonStyles()
+        {
+            var buttons = new[] { PetCatButton, PetCrabButton, PetDragonButton, PetFrogButton, PetSharkButton, PetSnakeButton };
+
+            foreach (var button in buttons)
+            {
+                if (button.Parent is Border border)
+                {
+                    border.Background = Brushes.White;
+                    border.BorderBrush = new SolidColorBrush(Color.FromRgb(221, 221, 221));
+                    border.BorderThickness = new Thickness(1);
+                }
+
+                if (button.Content is TextBlock textBlock)
+                {
+                    textBlock.Foreground = Brushes.Black;
+                }
+            }
+
+            // Random button has different default style
+            if (PetRandomButton.Parent is Border randomBorder)
+            {
+                randomBorder.Background = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+            }
+            if (PetRandomButton.Content is TextBlock randomTextBlock)
+            {
+                randomTextBlock.Foreground = Brushes.Black;
+            }
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -232,13 +504,37 @@ namespace AiAssistant
             var responseTextBlock = AddChatMessage("入力中...", isUser: false);
 
             // ViewModelのResponseTextをリアルタイムで表示に反映（イベントハンドラを先に登録）
+            Border? responseBorder = null;
             PropertyChangedEventHandler handler = (s, e) =>
             {
                 if (e.PropertyName == nameof(AssistantViewModel.ResponseText))
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        responseTextBlock.Text = _viewModel.ResponseText;
+                        // Markdownフォーマットでテキストを更新
+                        var newTextBlock = MarkdownTextBlockHelper.CreateFormattedTextBlock(_viewModel.ResponseText, false);
+
+                        // 親Borderを見つけて子を置き換え
+                        if (responseBorder == null)
+                        {
+                            // 初回：responseTextBlockの親Borderを見つける
+                            var parent = VisualTreeHelper.GetParent(responseTextBlock);
+                            if (parent is Border border)
+                            {
+                                responseBorder = border;
+                            }
+                        }
+
+                        if (responseBorder != null)
+                        {
+                            responseBorder.Child = newTextBlock;
+                        }
+                        else
+                        {
+                            // フォールバック：プレーンテキストとして更新
+                            responseTextBlock.Text = _viewModel.ResponseText;
+                        }
+
                         ScrollChatToBottom();
                     });
                 }
@@ -279,23 +575,31 @@ namespace AiAssistant
         // チャットメッセージをUIに追加
         private TextBlock AddChatMessage(string message, bool isUser)
         {
+            var settings = AppSettings.Instance.Assistant;
+            var isDark = settings.IsDarkTheme;
+
             var messageContainer = new Border
             {
                 Margin = new Thickness(0, 0, 0, 8),
                 Padding = new Thickness(10, 6, 10, 6),
                 CornerRadius = new CornerRadius(8),
-                Background = isUser ? new SolidColorBrush(Color.FromRgb(30, 144, 255)) : new SolidColorBrush(Color.FromRgb(240, 240, 240)),
+                Background = isUser
+                    ? new SolidColorBrush(Color.FromRgb(30, 144, 255))
+                    : new SolidColorBrush(isDark ? Color.FromRgb(50, 50, 50) : Color.FromRgb(240, 240, 240)),
                 HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left,
                 MaxWidth = 280
             };
 
-            var textBlock = new TextBlock
-            {
-                Text = message,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = isUser ? Brushes.White : Brushes.Black,
-                FontSize = 13
-            };
+            // Markdownサポートを使用してTextBlockを作成
+            var textBlock = isUser
+                ? new TextBlock
+                {
+                    Text = message,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = Brushes.White,
+                    FontSize = 13
+                }
+                : MarkdownTextBlockHelper.CreateFormattedTextBlock(message, isUser);
 
             messageContainer.Child = textBlock;
             ChatMessagesPanel.Children.Add(messageContainer);

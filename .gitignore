@@ -15,6 +15,15 @@
 **/appsettings.json
 !**/appsettings.template.json
 
+# 3D Assets and Models (too large for git)
+Sci-Fi Boss pack/
+**/Assets/
+**/*.fbx
+**/*.obj
+**/*.blend
+**/*.3ds
+**/*.max
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 
@@ -420,3 +429,4 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+AiAssistantTool

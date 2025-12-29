@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for:*)",
+      "Bash(do identify -format \"%f: %wx%h\\n\" \"$f\")",
+      "Bash(ffmpeg-8.0.1-essentials_build/bin/ffmpeg.exe:*)",
+      "Bash(do ffmpeg-8.0.1-essentials_build/bin/ffmpeg.exe -i \"$f\")",
+      "Bash(do echo \"$f:\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"D:\\PersonalGameDev\\AiAssistant\\AiAssistant\\CharacterAnimations\\check_dimensions.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"D:\\PersonalGameDev\\AiAssistant\\AiAssistant\\CharacterAnimations\\check_gif_dimensions.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"D:\\PersonalGameDev\\AiAssistant\\AiAssistant\\CharacterAnimations\\reconvert_uniform_size.ps1\")",
+      "Bash(powershell -Command \"Get-ChildItem -Filter ''*.gif'' | Select-Object -First 3 | ForEach-Object { Write-Host $_Name; & ''ffmpeg-8.0.1-essentials_build/bin/ffmpeg.exe'' -i $_FullName 2>&1 | Select-String ''Stream.*Video'' }\")",
+      "Bash(dotnet publish:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

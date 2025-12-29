@@ -156,12 +156,41 @@ namespace AiAssistant
     }
 
     /// <summary>
+    /// ペットの種類
+    /// </summary>
+    public enum PetType
+    {
+        Cat,      // HellCat
+        Crab,     // SciFi Crab
+        Dragon,   // SciFi Dragon
+        Frog,     // SciFi Frog
+        Shark,    // SciFi Shark
+        Snake,    // SciFi Snake
+        Random    // ランダムに選択
+    }
+
+    /// <summary>
     /// アシスタント設定
     /// </summary>
     public sealed class AssistantSettings
     {
         [JsonPropertyName("CharacterModelPath")]
         public string CharacterModelPath { get; set; } = string.Empty;
+
+        [JsonPropertyName("AvatarImagePath")]
+        public string AvatarImagePath { get; set; } = string.Empty;
+
+        [JsonPropertyName("CharacterAnimationsFolder")]
+        public string CharacterAnimationsFolder { get; set; } = "CharacterAnimations";
+
+        [JsonPropertyName("SelectedPet")]
+        public string SelectedPet { get; set; } = "Dragon"; // Cat, Crab, Dragon, Frog, Shark, Snake, Random
+
+        [JsonPropertyName("AnimationSwitchIntervalSeconds")]
+        public int AnimationSwitchIntervalSeconds { get; set; } = 15;
+
+        [JsonPropertyName("Theme")]
+        public string Theme { get; set; } = "Light"; // "Light" or "Dark"
 
         [JsonPropertyName("WindowWidth")]
         public double WindowWidth { get; set; } = 280;
@@ -180,6 +209,16 @@ namespace AiAssistant
 
         [JsonPropertyName("LastPositionY")]
         public double LastPositionY { get; set; } = 100;
+
+        /// <summary>
+        /// アバター画像が設定されているかどうか
+        /// </summary>
+        public bool HasAvatar => !string.IsNullOrWhiteSpace(AvatarImagePath) && File.Exists(AvatarImagePath);
+
+        /// <summary>
+        /// ダークテーマかどうか
+        /// </summary>
+        public bool IsDarkTheme => Theme.Equals("Dark", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
