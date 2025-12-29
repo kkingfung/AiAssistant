@@ -1,7 +1,7 @@
 ﻿<Window x:Class="AiAssistant.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="AiAssistant" Width="360" Height="460"
+        Title="AiAssistant" Width="360" Height="400"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -132,12 +132,12 @@
 
         <!-- キャラクター表示エリア（ドラッグ可能） -->
         <Border x:Name="CharacterBorder"
-                Width="340" Height="400"
+                Width="340" Height="340"
                 CornerRadius="12"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
                 Background="Transparent"
                 Padding="10"
-                Margin="0,50,10,10"
+                Margin="0,40,10,10"
                 MouseLeftButtonDown="Window_MouseLeftButtonDown"
                 Cursor="SizeAll">
             <Grid>
