@@ -33,14 +33,16 @@ AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピ�
 - **フローティングウィンドウUI**
   - 常に最前面表示、透明な背景
   - 画面右下に自動配置
-  - 固定サイズ（300×400px）
+  - 固定サイズ（360×400px）
   - タスクバーから非表示
   - 閉じるボタン（×）付き
 
 - **インタラクティブチャット**
   - キャラクターをクリックしてチャットバルーンを表示
+  - 大型チャットウィンドウ（340×380px）
   - テキスト入力とEnterキーで送信
   - リアルタイムストリーミングレスポンス
+  - Markdownフォーマット対応
   - 送信中は「入力中...」表示と送信ボタン無効化
 
 - **クリックスルーモード**
@@ -49,10 +51,11 @@ AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピ�
 
 - **アニメーションキャラクター** 🐉
   - 6種類のSciFiペット（Cat、Crab、Dragon、Frog、Shark、Snake）
-  - Unity Recorderで録画した透明背景のWebMアニメーション
-  - マゼンタクロマキー自動除去システム
+  - 54個の透明背景GIFアニメーション（320×320px）
+  - マゼンタクロマキー除去済み
   - ランダムアニメーション自動切り替え（15秒ごと）
   - UIからペットを即座に切り替え可能
+  - 右下配置で統一されたサイズ表示
 
 - **ペット選択UI** 🐾
   - ワンクリックで6種類のペットを切り替え
@@ -107,7 +110,8 @@ AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピ�
        "Enabled": true,
        "Provider": "Ollama",
        "Endpoint": "http://localhost:11434",
-       "Model": "phi3:mini",
+       "Model": "llama3.1:8b",
+       "MaxTokens": 2000,
        "PreferLocal": true
      }
    }

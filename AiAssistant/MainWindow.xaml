@@ -187,8 +187,8 @@
 
         <!-- チャットバルーンポップアップ -->
         <Border x:Name="ChatBalloon"
-                Width="280"
-                Height="180"
+                Width="340"
+                Height="380"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Bottom"
                 Margin="10,0,0,10"
