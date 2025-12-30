@@ -2,6 +2,8 @@
 
 WPFと.NET 8.0で構築されたフローティングデスクトップAIアシスタント
 
+<img src="/Result.PNG" width="200"><img src="/Result2.PNG" width="200">
+
 ## 概要
 
 AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピレーションを受けた、現代的なデスクトップAIアシスタントアプリケーションです。透明な背景のフローティングウィンドウとして常にデスクトップ上に表示され、ユーザーの作業を邪魔することなく利用できます。
