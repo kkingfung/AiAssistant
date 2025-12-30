@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,6 +26,15 @@ namespace AiAssistant
 
         [JsonPropertyName("Assistant")]
         public AssistantSettings Assistant { get; set; } = new();
+
+        [JsonPropertyName("Weather")]
+        public WeatherSettings Weather { get; set; } = new();
+
+        [JsonPropertyName("Fund")]
+        public FundSettings Fund { get; set; } = new();
+
+        [JsonPropertyName("Anthropic")]
+        public AnthropicSettings Anthropic { get; set; } = new();
 
         /// <summary>
         /// シングルトンインスタンスを取得
@@ -251,5 +261,50 @@ namespace AiAssistant
         /// ローカルLLMが有効で、ローカル優先設定かどうか
         /// </summary>
         public bool ShouldUseLocal => Enabled && PreferLocal;
+    }
+
+    /// <summary>
+    /// 天気サービス設定
+    /// </summary>
+    public sealed class WeatherSettings
+    {
+        [JsonPropertyName("City")]
+        public string City { get; set; } = "東京";
+
+        [JsonPropertyName("Latitude")]
+        public double Latitude { get; set; } = 35.6762;
+
+        [JsonPropertyName("Longitude")]
+        public double Longitude { get; set; } = 139.6503;
+    }
+
+    /// <summary>
+    /// ファンド監視設定
+    /// </summary>
+    public sealed class FundSettings
+    {
+        [JsonPropertyName("FundUrls")]
+        public List<string> FundUrls { get; set; } = new()
+        {
+            "https://fs.bk.mufg.jp/webasp/mufg/fund/detail/m02823520.html",
+            "https://fs.bk.mufg.jp/webasp/mufg/fund/detail/m10322220.html"
+        };
+    }
+
+    /// <summary>
+    /// Anthropic API設定（組織アカウント用）
+    /// </summary>
+    public sealed class AnthropicSettings
+    {
+        [JsonPropertyName("AdminApiKey")]
+        public string AdminApiKey { get; set; } = string.Empty;
+
+        [JsonPropertyName("OrganizationId")]
+        public string OrganizationId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Admin APIが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(AdminApiKey) && !string.IsNullOrWhiteSpace(OrganizationId);
     }
 }

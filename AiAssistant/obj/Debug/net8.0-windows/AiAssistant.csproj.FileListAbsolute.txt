@@ -82,3 +82,15 @@ D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\CharacterAni
 D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\CharacterAnimations\SnakeIdle14.gif
 D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\CharacterAnimations\SnakeIdle15.gif
 D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\WpfAnimatedGif.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\Google.Apis.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\Google.Apis.Auth.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\Google.Apis.Calendar.v3.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\Google.Apis.Core.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\Google.Apis.Gmail.v1.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\HtmlAgilityPack.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\Newtonsoft.Json.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\System.Management.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\runtimes\win\lib\net7.0\System.Management.dll
+D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\client_secret.json
+D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\SettingsWindow.baml
+D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\SettingsWindow.g.cs

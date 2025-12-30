@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
@@ -27,6 +29,18 @@ namespace AiAssistant
         private AssistantViewModel? _viewModel;
         private Button? _sendButton;
         private CharacterAnimationController? _animationController;
+
+        // クイックアクションサービス
+        private ICalendarService? _calendarService;
+        private IWeatherService? _weatherService;
+        private IFundService? _fundService;
+        private IGmailService? _gmailService;
+        private ICurrencyService? _currencyService;
+        private ClaudeUsageService? _claudeUsageService;
+        private IChatHistoryService? _chatHistoryService;
+
+        // 現在表示中のメール一覧（インタラクション用）
+        private IReadOnlyList<EmailInfo>? _currentEmails;
 
         public MainWindow()
         {
@@ -96,6 +110,79 @@ namespace AiAssistant
 
             // AIサービスを非同期で初期化
             await InitializeAiServiceAsync();
+
+            // クイックアクションサービスを初期化
+            InitializeQuickActionServices();
+        }
+
+        /// <summary>
+        /// クイックアクションサービスを初期化します
+        /// </summary>
+        private void InitializeQuickActionServices()
+        {
+            var settings = AppSettings.Instance;
+
+            // 天気サービス
+            _weatherService = new WeatherService(
+                settings.Weather.City,
+                settings.Weather.Latitude,
+                settings.Weather.Longitude
+            );
+
+            // ファンドサービス
+            _fundService = new MufgFundService(settings.Fund.FundUrls);
+
+            // Google関連サービスは認証時に初期化
+            _calendarService = new GoogleCalendarService();
+            _gmailService = new GmailService();
+
+            // 為替レートサービス
+            _currencyService = new CurrencyService();
+
+            // Claude使用量サービス
+            _claudeUsageService = new ClaudeUsageService();
+
+            // 会話履歴サービス
+            _chatHistoryService = new ChatHistoryService();
+
+            // 前回のセッションを復元
+            RestoreChatHistory();
+
+            Console.WriteLine("[QuickAction] クイックアクションサービスを初期化しました");
+        }
+
+        /// <summary>
+        /// 前回の会話履歴を復元します
+        /// </summary>
+        private void RestoreChatHistory()
+        {
+            if (_chatHistoryService == null || !_chatHistoryService.IsEnabled) return;
+
+            try
+            {
+                var lastSession = _chatHistoryService.RestoreLastSession();
+                if (lastSession != null && lastSession.Messages.Count > 0)
+                {
+                    // チャットパネルに履歴を表示
+                    foreach (var message in lastSession.Messages)
+                    {
+                        if (message.Role == "user")
+                        {
+                            AddChatMessage(message.Content, isUser: true);
+                        }
+                        else if (message.Role == "assistant")
+                        {
+                            AddChatMessage(message.Content, isUser: false);
+                        }
+                    }
+
+                    Console.WriteLine($"[ChatHistory] {lastSession.Messages.Count}件の履歴を復元しました");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatHistory] 履歴復元エラー: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -221,6 +308,14 @@ namespace AiAssistant
 
             // アニメーションコントローラーをクリーンアップ
             _animationController?.Dispose();
+
+            // クイックアクションサービスをクリーンアップ
+            (_calendarService as IDisposable)?.Dispose();
+            (_weatherService as IDisposable)?.Dispose();
+            (_fundService as IDisposable)?.Dispose();
+            (_gmailService as IDisposable)?.Dispose();
+            (_currencyService as IDisposable)?.Dispose();
+            _claudeUsageService?.Dispose();
         }
 
         // 閉じるボタン
@@ -239,6 +334,42 @@ namespace AiAssistant
         private void OnPetSelectorButtonClick(object sender, RoutedEventArgs e)
         {
             TogglePetSelector();
+        }
+
+        // 設定ボタン
+        private void OnSettingsButtonClick(object sender, RoutedEventArgs e)
+        {
+            OpenSettingsWindow();
+        }
+
+        /// <summary>
+        /// 設定ウィンドウを開きます
+        /// </summary>
+        private void OpenSettingsWindow()
+        {
+            try
+            {
+                var settingsWindow = new SettingsWindow(_chatHistoryService);
+                settingsWindow.Owner = this;
+
+                var result = settingsWindow.ShowDialog();
+
+                if (result == true && settingsWindow.SettingsSaved)
+                {
+                    // 設定をリロード
+                    AppSettings.Reload();
+
+                    // テーマを再適用
+                    ApplyTheme();
+
+                    ShowTransientMessage("設定を保存しました。一部の変更は再起動後に反映されます。", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Settings] 設定ウィンドウエラー: {ex.Message}");
+                ShowTransientMessage("設定ウィンドウを開けませんでした", 2000);
+            }
         }
 
         // ペット選択ポップアップの表示/非表示を切り替え
@@ -500,6 +631,9 @@ namespace AiAssistant
             // ユーザーメッセージを表示
             AddChatMessage(message, isUser: true);
 
+            // 履歴に保存
+            _chatHistoryService?.AddMessage("user", message);
+
             // AIレスポンスを取得（ストリーミング）
             var responseTextBlock = AddChatMessage("入力中...", isUser: false);
 
@@ -544,6 +678,12 @@ namespace AiAssistant
             {
                 _viewModel.PropertyChanged += handler;
                 await _viewModel.StreamPromptAsync(message);
+
+                // AIの応答を履歴に保存
+                if (!string.IsNullOrEmpty(_viewModel.ResponseText))
+                {
+                    _chatHistoryService?.AddMessage("assistant", _viewModel.ResponseText);
+                }
             }
             catch (Exception ex)
             {
@@ -652,6 +792,751 @@ namespace AiAssistant
                 TransientBorder.Visibility = Visibility.Collapsed;
             }
         }
+
+        #region Quick Action Handlers
+
+        /// <summary>
+        /// カレンダーボタンクリック - コンテキストメニューを表示
+        /// </summary>
+        private void OnCalendarButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            var weekItem = new MenuItem { Header = "📅 今週の予定" };
+            weekItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.ThisWeek);
+
+            var nextWeekItem = new MenuItem { Header = "📅 来週の予定" };
+            nextWeekItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.NextWeek);
+
+            var monthItem = new MenuItem { Header = "🗓 今月の予定" };
+            monthItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.ThisMonth);
+
+            var nextMonthItem = new MenuItem { Header = "🗓 来月の予定" };
+            nextMonthItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.NextMonth);
+
+            contextMenu.Items.Add(weekItem);
+            contextMenu.Items.Add(nextWeekItem);
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(monthItem);
+            contextMenu.Items.Add(nextMonthItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// カレンダー期間の種類
+        /// </summary>
+        private enum CalendarPeriod
+        {
+            ThisWeek,
+            NextWeek,
+            ThisMonth,
+            NextMonth
+        }
+
+        /// <summary>
+        /// カレンダーイベントを表示します
+        /// </summary>
+        private async Task ShowCalendarEventsAsync(CalendarPeriod period)
+        {
+            if (_calendarService == null) return;
+
+            try
+            {
+                var label = period switch
+                {
+                    CalendarPeriod.ThisWeek => "今週",
+                    CalendarPeriod.NextWeek => "来週",
+                    CalendarPeriod.ThisMonth => "今月",
+                    CalendarPeriod.NextMonth => "来月",
+                    _ => "予定"
+                };
+
+                ShowTransientMessage($"{label}のカレンダーを取得中...", 10000);
+
+                // 認証確認
+                if (!_calendarService.IsAuthenticated)
+                {
+                    ShowTransientMessage("Googleアカウントにログイン中...", 10000);
+                    var authenticated = await _calendarService.AuthenticateAsync();
+                    if (!authenticated)
+                    {
+                        ShowTransientMessage("Google認証に失敗しました。設定を確認してください。", 3000);
+                        return;
+                    }
+                }
+
+                // イベントを取得
+                var events = period switch
+                {
+                    CalendarPeriod.ThisWeek => await _calendarService.GetWeekEventsAsync(),
+                    CalendarPeriod.NextWeek => await _calendarService.GetNextWeekEventsAsync(),
+                    CalendarPeriod.ThisMonth => await _calendarService.GetMonthEventsAsync(),
+                    CalendarPeriod.NextMonth => await _calendarService.GetNextMonthEventsAsync(),
+                    _ => await _calendarService.GetWeekEventsAsync()
+                };
+
+                var summary = _calendarService.FormatEventsSummary(events, label);
+
+                // チャットに表示
+                OpenChatAndShowMessage(summary);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Calendar] エラー: {ex.Message}");
+                ShowTransientMessage("カレンダーの取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 天気ボタンクリック
+        /// </summary>
+        private async void OnWeatherButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (_weatherService == null) return;
+
+            try
+            {
+                ShowTransientMessage("天気を取得中...", 10000);
+
+                var current = await _weatherService.GetCurrentWeatherAsync();
+                var forecast = await _weatherService.GetWeeklyForecastAsync();
+                var summary = _weatherService.FormatWeatherSummary(current, forecast);
+
+                // チャットに表示
+                OpenChatAndShowMessage(summary);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Weather] エラー: {ex.Message}");
+                ShowTransientMessage("天気の取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// ファンドボタンクリック
+        /// </summary>
+        private async void OnFundButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (_fundService == null) return;
+
+            try
+            {
+                ShowTransientMessage("ファンド情報を取得中...", 10000);
+
+                var funds = await _fundService.GetAllFundsInfoAsync();
+                var summary = _fundService.FormatFundsSummary(funds);
+
+                // チャットに表示
+                OpenChatAndShowMessage(summary);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Fund] エラー: {ex.Message}");
+                ShowTransientMessage("ファンド情報の取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// Gmailボタンクリック
+        /// </summary>
+        private async void OnGmailButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (_gmailService == null) return;
+
+            try
+            {
+                ShowTransientMessage("メールを取得中...", 10000);
+
+                // 認証確認
+                if (!_gmailService.IsAuthenticated)
+                {
+                    ShowTransientMessage("Googleアカウントにログイン中...", 10000);
+                    var authenticated = await _gmailService.AuthenticateAsync();
+                    if (!authenticated)
+                    {
+                        ShowTransientMessage("Google認証に失敗しました。設定を確認してください。", 3000);
+                        return;
+                    }
+                }
+
+                // 未読メールを取得
+                var emails = await _gmailService.GetUnreadEmailsAsync(10);
+                _currentEmails = emails;
+
+                // チャットに表示（クリック可能なメールリスト）
+                OpenChatAndShowEmailList(emails, "未読メール");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Gmail] エラー: {ex.Message}");
+                ShowTransientMessage("メールの取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 為替レートボタンクリック
+        /// </summary>
+        private async void OnCurrencyButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (_currencyService == null) return;
+
+            try
+            {
+                ShowTransientMessage("為替レートを取得中...", 10000);
+
+                // JPY, HKD, KRW の為替レートを取得
+                var rates = await _currencyService.GetRatesAsync(new[] { "JPY", "HKD", "KRW" });
+                var summary = _currencyService.FormatRatesSummary(rates);
+
+                // チャットに表示
+                OpenChatAndShowMessage(summary);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Currency] エラー: {ex.Message}");
+                ShowTransientMessage("為替レートの取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// Claude使用量ボタンクリック - メニューを表示
+        /// </summary>
+        private void OnClaudeUsageButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+            if (_claudeUsageService == null) return;
+
+            var contextMenu = new ContextMenu();
+
+            var showInfoItem = new MenuItem { Header = "📊 使用量情報を表示" };
+            showInfoItem.Click += async (s, args) => await ShowClaudeUsageInfoAsync();
+
+            var openConsoleItem = new MenuItem { Header = "🌐 コンソールを開く" };
+            openConsoleItem.Click += (s, args) => _claudeUsageService.OpenConsoleInBrowser();
+
+            contextMenu.Items.Add(showInfoItem);
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(openConsoleItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// Claude使用量情報を表示します
+        /// </summary>
+        private async Task ShowClaudeUsageInfoAsync()
+        {
+            if (_claudeUsageService == null) return;
+
+            try
+            {
+                ShowTransientMessage("使用量情報を取得中...", 5000);
+
+                var usage = await _claudeUsageService.GetCurrentMonthUsageAsync();
+                var summary = _claudeUsageService.FormatUsageSummary(usage);
+
+                // チャットに使用量情報を表示
+                OpenChatAndShowUsageInfo(summary);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ClaudeUsage] エラー: {ex.Message}");
+                ShowTransientMessage("使用量情報の取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 使用量情報をチャットに表示します（コンソールを開くボタン付き）
+        /// </summary>
+        private void OpenChatAndShowUsageInfo(string message)
+        {
+            // チャットを開く
+            if (!_isChatOpen)
+            {
+                _isChatOpen = true;
+                ChatBalloon.Visibility = Visibility.Visible;
+
+                if (_isClickThrough)
+                {
+                    _isClickThrough = false;
+                    ClickThroughHelper.SetClickThrough(this, false);
+                }
+            }
+
+            // メッセージを追加
+            AddSystemMessage(message);
+
+            // コンソールを開くボタンを追加
+            AddConsoleButton();
+
+            TransientBorder.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// コンソールを開くボタンをチャットに追加します
+        /// </summary>
+        private void AddConsoleButton()
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var isDark = settings.IsDarkTheme;
+
+            var button = new Button
+            {
+                Content = "🌐 Anthropic Consoleを開く",
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 4, 0, 8),
+                Background = new SolidColorBrush(Color.FromRgb(210, 105, 30)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+
+            button.Click += (s, e) => _claudeUsageService?.OpenConsoleInBrowser();
+
+            ChatMessagesPanel.Children.Add(button);
+            ScrollChatToBottom();
+        }
+
+        /// <summary>
+        /// チャットを開いてクリック可能なメールリストを表示します
+        /// </summary>
+        private void OpenChatAndShowEmailList(IReadOnlyList<EmailInfo> emails, string label)
+        {
+            // チャットを開く
+            if (!_isChatOpen)
+            {
+                _isChatOpen = true;
+                ChatBalloon.Visibility = Visibility.Visible;
+
+                // クリックスルーを無効化
+                if (_isClickThrough)
+                {
+                    _isClickThrough = false;
+                    ClickThroughHelper.SetClickThrough(this, false);
+                }
+            }
+
+            // ヘッダーを追加
+            AddSystemMessage($"📧 {label} ({emails.Count}件)\nメールをクリックで詳細表示・フラグ変更");
+
+            // 各メールをクリック可能なアイテムとして追加
+            foreach (var email in emails)
+            {
+                AddEmailItem(email);
+            }
+
+            // 一時メッセージを消す
+            TransientBorder.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// クリック可能なメールアイテムをチャットに追加します
+        /// </summary>
+        private void AddEmailItem(EmailInfo email)
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var isDark = settings.IsDarkTheme;
+
+            // メインコンテナ
+            var container = new Border
+            {
+                Margin = new Thickness(0, 0, 0, 6),
+                Padding = new Thickness(8, 6, 8, 6),
+                CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(isDark
+                    ? Color.FromRgb(45, 55, 72)
+                    : Color.FromRgb(248, 250, 252)),
+                BorderBrush = new SolidColorBrush(email.IsUnread
+                    ? Color.FromRgb(59, 130, 246) // 未読: 青
+                    : Color.FromRgb(200, 200, 200)), // 既読: グレー
+                BorderThickness = new Thickness(email.IsUnread ? 2 : 1),
+                Cursor = Cursors.Hand,
+                MaxWidth = 300,
+                Tag = email.Id
+            };
+
+            var mainGrid = new Grid();
+            mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // 左側: メール情報
+            var infoPanel = new StackPanel { Margin = new Thickness(0, 0, 8, 0) };
+
+            // 差出人と時刻
+            var headerPanel = new StackPanel { Orientation = Orientation.Horizontal };
+            var unreadMarker = new TextBlock
+            {
+                Text = email.IsUnread ? "●" : " ",
+                Foreground = new SolidColorBrush(Color.FromRgb(59, 130, 246)),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0)
+            };
+            var fromText = new TextBlock
+            {
+                Text = TruncateText(email.From, 18),
+                FontWeight = email.IsUnread ? FontWeights.Bold : FontWeights.Normal,
+                Foreground = new SolidColorBrush(isDark ? Colors.White : Colors.Black),
+                FontSize = 12
+            };
+            var timeText = new TextBlock
+            {
+                Text = email.ReceivedAt.ToString(" HH:mm"),
+                Foreground = new SolidColorBrush(isDark ? Colors.LightGray : Colors.Gray),
+                FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            headerPanel.Children.Add(unreadMarker);
+            headerPanel.Children.Add(fromText);
+            headerPanel.Children.Add(timeText);
+
+            // 件名
+            var subjectText = new TextBlock
+            {
+                Text = TruncateText(email.Subject, 30),
+                Foreground = new SolidColorBrush(isDark
+                    ? Color.FromRgb(200, 220, 255)
+                    : Color.FromRgb(30, 64, 175)),
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+
+            infoPanel.Children.Add(headerPanel);
+            infoPanel.Children.Add(subjectText);
+            Grid.SetColumn(infoPanel, 0);
+            mainGrid.Children.Add(infoPanel);
+
+            // 右側: アクションボタン
+            var buttonPanel = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            // 既読/未読トグルボタン
+            var toggleButton = new Button
+            {
+                Content = email.IsUnread ? "✓" : "○",
+                Width = 24,
+                Height = 24,
+                Margin = new Thickness(0, 0, 0, 2),
+                Background = new SolidColorBrush(email.IsUnread
+                    ? Color.FromRgb(34, 197, 94) // 緑: 既読にする
+                    : Color.FromRgb(59, 130, 246)), // 青: 未読にする
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 12,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                ToolTip = email.IsUnread ? "既読にする" : "未読にする",
+                Tag = email.Id
+            };
+            toggleButton.Click += OnEmailToggleReadClick;
+
+            buttonPanel.Children.Add(toggleButton);
+            Grid.SetColumn(buttonPanel, 1);
+            mainGrid.Children.Add(buttonPanel);
+
+            container.Child = mainGrid;
+
+            // クリックイベント（詳細表示）
+            container.MouseLeftButtonUp += OnEmailItemClick;
+
+            ChatMessagesPanel.Children.Add(container);
+            ScrollChatToBottom();
+        }
+
+        /// <summary>
+        /// メールアイテムクリック（詳細表示）
+        /// </summary>
+        private async void OnEmailItemClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not Border border || border.Tag is not string emailId)
+                return;
+
+            // ボタンクリックは無視
+            if (e.OriginalSource is Button) return;
+
+            if (_gmailService == null) return;
+
+            try
+            {
+                ShowTransientMessage("メール内容を取得中...", 5000);
+
+                var details = await _gmailService.GetEmailDetailsAsync(emailId);
+                if (details == null)
+                {
+                    ShowTransientMessage("メールの取得に失敗しました", 2000);
+                    return;
+                }
+
+                // 詳細を表示
+                ShowEmailDetails(details);
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Gmail] 詳細取得エラー: {ex.Message}");
+                ShowTransientMessage("メールの取得に失敗しました", 2000);
+            }
+        }
+
+        /// <summary>
+        /// メール詳細を表示します
+        /// </summary>
+        private void ShowEmailDetails(EmailInfo email)
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var isDark = settings.IsDarkTheme;
+
+            // 詳細コンテナ
+            var container = new Border
+            {
+                Margin = new Thickness(0, 4, 0, 8),
+                Padding = new Thickness(10, 8, 10, 8),
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(isDark
+                    ? Color.FromRgb(30, 41, 59)
+                    : Color.FromRgb(241, 245, 249)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(99, 102, 241)),
+                BorderThickness = new Thickness(1),
+                MaxWidth = 310
+            };
+
+            var panel = new StackPanel();
+
+            // ヘッダー
+            var header = new TextBlock
+            {
+                Text = "📨 メール詳細",
+                FontWeight = FontWeights.Bold,
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(99, 102, 241)),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            panel.Children.Add(header);
+
+            // 差出人
+            var fromLabel = new TextBlock
+            {
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(isDark ? Colors.White : Colors.Black)
+            };
+            fromLabel.Inlines.Add(new Run("差出人: ") { FontWeight = FontWeights.Bold });
+            fromLabel.Inlines.Add(new Run(email.From));
+            if (!string.IsNullOrEmpty(email.FromEmail) && email.FromEmail != email.From)
+            {
+                fromLabel.Inlines.Add(new Run($"\n        <{email.FromEmail}>") { FontSize = 10, Foreground = Brushes.Gray });
+            }
+            panel.Children.Add(fromLabel);
+
+            // 件名
+            var subjectLabel = new TextBlock
+            {
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 4, 0, 0),
+                Foreground = new SolidColorBrush(isDark ? Colors.White : Colors.Black)
+            };
+            subjectLabel.Inlines.Add(new Run("件名: ") { FontWeight = FontWeights.Bold });
+            subjectLabel.Inlines.Add(new Run(email.Subject));
+            panel.Children.Add(subjectLabel);
+
+            // 日時
+            var dateLabel = new TextBlock
+            {
+                Text = $"日時: {email.ReceivedAt:yyyy/MM/dd HH:mm}",
+                FontSize = 10,
+                Foreground = Brushes.Gray,
+                Margin = new Thickness(0, 2, 0, 6)
+            };
+            panel.Children.Add(dateLabel);
+
+            // 本文（セパレータ付き）
+            var separator = new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromRgb(200, 200, 200)),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            panel.Children.Add(separator);
+
+            var bodyText = new TextBlock
+            {
+                Text = TruncateText(email.Body ?? email.Snippet, 500),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(isDark
+                    ? Color.FromRgb(226, 232, 240)
+                    : Color.FromRgb(51, 65, 85)),
+                LineHeight = 16
+            };
+            panel.Children.Add(bodyText);
+
+            // アクションボタン
+            var actionPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 8, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var toggleBtn = new Button
+            {
+                Content = email.IsUnread ? "既読にする" : "未読にする",
+                Padding = new Thickness(8, 4, 8, 4),
+                Background = new SolidColorBrush(email.IsUnread
+                    ? Color.FromRgb(34, 197, 94)
+                    : Color.FromRgb(59, 130, 246)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                Cursor = Cursors.Hand,
+                Tag = email.Id
+            };
+            toggleBtn.Click += OnEmailToggleReadClick;
+            actionPanel.Children.Add(toggleBtn);
+
+            panel.Children.Add(actionPanel);
+
+            container.Child = panel;
+            ChatMessagesPanel.Children.Add(container);
+            ScrollChatToBottom();
+        }
+
+        /// <summary>
+        /// 既読/未読トグルボタンクリック
+        /// </summary>
+        private async void OnEmailToggleReadClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button || button.Tag is not string emailId)
+                return;
+
+            e.Handled = true; // 親のクリックイベントを止める
+
+            if (_gmailService == null || _currentEmails == null) return;
+
+            // 現在のメール状態を取得
+            var email = _currentEmails.FirstOrDefault(m => m.Id == emailId);
+            if (email == null) return;
+
+            try
+            {
+                bool success;
+                if (email.IsUnread)
+                {
+                    success = await _gmailService.MarkAsReadAsync(emailId);
+                    if (success)
+                    {
+                        ShowTransientMessage("既読にしました", 1500);
+                    }
+                }
+                else
+                {
+                    success = await _gmailService.MarkAsUnreadAsync(emailId);
+                    if (success)
+                    {
+                        ShowTransientMessage("未読にしました", 1500);
+                    }
+                }
+
+                if (!success)
+                {
+                    ShowTransientMessage("操作に失敗しました", 2000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Gmail] フラグ変更エラー: {ex.Message}");
+                ShowTransientMessage("操作に失敗しました", 2000);
+            }
+        }
+
+        /// <summary>
+        /// テキストを指定長で切り詰めます
+        /// </summary>
+        private static string TruncateText(string? text, int maxLength)
+        {
+            if (string.IsNullOrEmpty(text)) return "(なし)";
+            if (text.Length <= maxLength) return text;
+            return text[..(maxLength - 1)] + "…";
+        }
+
+        /// <summary>
+        /// チャットを開いてメッセージを表示します
+        /// </summary>
+        private void OpenChatAndShowMessage(string message)
+        {
+            // チャットを開く
+            if (!_isChatOpen)
+            {
+                _isChatOpen = true;
+                ChatBalloon.Visibility = Visibility.Visible;
+
+                // クリックスルーを無効化
+                if (_isClickThrough)
+                {
+                    _isClickThrough = false;
+                    ClickThroughHelper.SetClickThrough(this, false);
+                }
+            }
+
+            // メッセージを追加（システムメッセージとして）
+            AddSystemMessage(message);
+
+            // 一時メッセージを消す
+            TransientBorder.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// システムメッセージをチャットに追加します
+        /// </summary>
+        private void AddSystemMessage(string message)
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var isDark = settings.IsDarkTheme;
+
+            var messageContainer = new Border
+            {
+                Margin = new Thickness(0, 0, 0, 8),
+                Padding = new Thickness(10, 6, 10, 6),
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(isDark
+                    ? Color.FromRgb(40, 60, 80)
+                    : Color.FromRgb(230, 245, 255)),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                MaxWidth = 300
+            };
+
+            var textBlock = new TextBlock
+            {
+                Text = message,
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(isDark
+                    ? Color.FromRgb(220, 240, 255)
+                    : Color.FromRgb(20, 40, 60)),
+                FontSize = 12,
+                FontFamily = new FontFamily("Consolas, MS Gothic, monospace")
+            };
+
+            messageContainer.Child = textBlock;
+            ChatMessagesPanel.Children.Add(messageContainer);
+
+            ScrollChatToBottom();
+        }
+
+        #endregion
 
         #region Win32 HotKey interop
 

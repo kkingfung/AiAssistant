@@ -26,7 +26,8 @@
         <StackPanel Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Top"
-                    Margin="5">
+                    Margin="5"
+                    Panel.ZIndex="100">
             <!-- ペット選択ボタン -->
             <Button Content="🐾"
                     Width="28"
@@ -130,6 +131,251 @@
             </Button>
         </StackPanel>
 
+        <!-- クイックアクションボタンパネル（右側・縦） -->
+        <StackPanel Orientation="Vertical"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,40,5,0"
+                    Panel.ZIndex="100">
+            <!-- カレンダーボタン -->
+            <Button Content="📅"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,3"
+                    Background="#8800AA00"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnCalendarButtonClick"
+                    ToolTip="カレンダー">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CC00CC00"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- 天気ボタン -->
+            <Button Content="🌤"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,3"
+                    Background="#88FF8C00"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnWeatherButtonClick"
+                    ToolTip="天気">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CCFFA500"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- ファンドボタン -->
+            <Button Content="💹"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,3"
+                    Background="#88DC143C"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnFundButtonClick"
+                    ToolTip="ファンド情報">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CCFF1493"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- Gmailボタン -->
+            <Button Content="📧"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,3"
+                    Background="#88EA4335"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnGmailButtonClick"
+                    ToolTip="Gmail">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CCFF6347"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- 為替レートボタン -->
+            <Button Content="💱"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,3"
+                    Background="#884169E1"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnCurrencyButtonClick"
+                    ToolTip="為替レート">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CC6A5ACD"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- Claude使用量ボタン -->
+            <Button Content="📊"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,3"
+                    Background="#88D2691E"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnClaudeUsageButtonClick"
+                    ToolTip="Claude使用量">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CCCD853F"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+
+            <!-- 設定ボタン -->
+            <Button Content="⚙"
+                    Width="28"
+                    Height="28"
+                    Margin="0,0,0,0"
+                    Background="#88708090"
+                    Foreground="White"
+                    BorderThickness="0"
+                    FontSize="14"
+                    Cursor="Hand"
+                    Click="OnSettingsButtonClick"
+                    ToolTip="設定">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="14">
+                                        <ContentPresenter HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#CC778899"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </StackPanel>
+
         <!-- キャラクター表示エリア（ドラッグ可能） -->
         <Border x:Name="CharacterBorder"
                 Width="340" Height="340"
@@ -197,7 +443,8 @@
                 Padding="0"
                 Visibility="Collapsed"
                 IsHitTestVisible="True"
-                Effect="{StaticResource DropShadowEffect}">
+                Effect="{StaticResource DropShadowEffect}"
+                Panel.ZIndex="200">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -303,7 +550,8 @@
                 Padding="0"
                 Visibility="Collapsed"
                 IsHitTestVisible="True"
-                Effect="{StaticResource DropShadowEffect}">
+                Effect="{StaticResource DropShadowEffect}"
+                Panel.ZIndex="200">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -421,7 +669,8 @@
                 Background="#DD000000"
                 CornerRadius="6"
                 Padding="12,6"
-                Visibility="Collapsed">
+                Visibility="Collapsed"
+                Panel.ZIndex="300">
             <TextBlock x:Name="TransientMessage"
                        Foreground="White"
                        FontSize="12"

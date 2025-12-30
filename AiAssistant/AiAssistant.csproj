@@ -13,6 +13,9 @@
     <PackageReference Include="OpenAI" Version="2.1.0" />
     <PackageReference Include="OllamaSharp" Version="5.4.8" />
     <PackageReference Include="WpfAnimatedGif" Version="2.0.2" />
+    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.69.0.3667" />
+    <PackageReference Include="Google.Apis.Gmail.v1" Version="1.69.0.3742" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.72" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +23,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="appsettings.template.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="client_secret.json" Condition="Exists('client_secret.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="CharacterAnimations\**\*">

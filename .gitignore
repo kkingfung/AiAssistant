@@ -14,6 +14,8 @@
 # API Keys and sensitive configuration
 **/appsettings.json
 !**/appsettings.template.json
+**/client_secret*.json
+**/tokens/
 
 # 3D Assets and Models (too large for git)
 Sci-Fi Boss pack/
