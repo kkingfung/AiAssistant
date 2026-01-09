@@ -41,10 +41,25 @@ namespace AiAssistant
         private IChatHistoryService? _chatHistoryService;
         private ITranslationService? _translationService;
         private IGitHubService? _gitHubService;
+        private PomodoroService? _pomodoroService;
+        private MiniGameService? _miniGameService;
+        private VoiceInputService? _voiceInputService;
+        private VoiceOutputService? _voiceOutputService;
+        private ClipboardHistoryService? _clipboardHistoryService;
+        private QuickNotesService? _quickNotesService;
+        private MediaControlService? _mediaControlService;
+        private DailyGoalsService? _dailyGoalsService;
+        private ScreenshotOcrService? _screenshotService;
 
         // 翻訳用ホットキー
         private const int TRANSLATE_HOTKEY_ID = 0xB002;
         private const uint MOD_SHIFT = 0x0004;
+
+        // 音声読み上げ用ホットキー
+        private const int SPEECH_HOTKEY_ID = 0xB003;
+
+        // スクリーンショット用ホットキー
+        private const int SCREENSHOT_HOTKEY_ID = 0xB004;
 
         // 現在表示中のメール一覧（インタラクション用）
         private IReadOnlyList<EmailInfo>? _currentEmails;
@@ -210,6 +225,38 @@ namespace AiAssistant
             // 前回のセッションを復元
             RestoreChatHistory();
 
+            // ポモドーロタイマー
+            _pomodoroService = new PomodoroService();
+            _pomodoroService.Tick += OnPomodoroTick;
+            _pomodoroService.StateChanged += OnPomodoroStateChanged;
+            _pomodoroService.PomodoroCompleted += OnPomodoroCompleted;
+
+            // ミニゲームサービス
+            _miniGameService = new MiniGameService();
+
+            // 音声入力サービス
+            _voiceInputService = new VoiceInputService();
+            _voiceInputService.Recognized += OnVoiceRecognized;
+            _voiceInputService.Error += OnVoiceError;
+
+            // 音声出力サービス
+            _voiceOutputService = new VoiceOutputService();
+
+            // クリップボード履歴サービス
+            _clipboardHistoryService = new ClipboardHistoryService();
+
+            // クイックノートサービス
+            _quickNotesService = new QuickNotesService();
+
+            // メディアコントロールサービス
+            _mediaControlService = new MediaControlService();
+
+            // デイリーゴールサービス
+            _dailyGoalsService = new DailyGoalsService();
+
+            // スクリーンショットサービス
+            _screenshotService = new ScreenshotOcrService();
+
             Console.WriteLine("[QuickAction] クイックアクションサービスを初期化しました");
         }
 
@@ -373,6 +420,14 @@ namespace AiAssistant
 
             // 翻訳用ホットキー Ctrl+Shift+T を登録
             _ = RegisterHotKey(hwnd, TRANSLATE_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, vk);
+
+            // 音声読み上げ用ホットキー Ctrl+Shift+S を登録
+            var vkS = (uint)KeyInterop.VirtualKeyFromKey(Key.S);
+            _ = RegisterHotKey(hwnd, SPEECH_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, vkS);
+
+            // スクリーンショット用ホットキー Ctrl+Shift+P を登録
+            var vkP = (uint)KeyInterop.VirtualKeyFromKey(Key.P);
+            _ = RegisterHotKey(hwnd, SCREENSHOT_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, vkP);
         }
 
         private void OnClosed(object? sender, EventArgs e)
@@ -383,6 +438,8 @@ namespace AiAssistant
             var helper = new WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_ID);
             UnregisterHotKey(helper.Handle, TRANSLATE_HOTKEY_ID);
+            UnregisterHotKey(helper.Handle, SPEECH_HOTKEY_ID);
+            UnregisterHotKey(helper.Handle, SCREENSHOT_HOTKEY_ID);
 
             // アニメーションコントローラーをクリーンアップ
             _animationController?.Dispose();
@@ -638,6 +695,16 @@ namespace AiAssistant
                     _ = TranslateClipboardTextAsync();
                     handled = true;
                 }
+                else if (hotkeyId == SPEECH_HOTKEY_ID)
+                {
+                    SpeakClipboardText();
+                    handled = true;
+                }
+                else if (hotkeyId == SCREENSHOT_HOTKEY_ID)
+                {
+                    CaptureScreenshotWithHotkey();
+                    handled = true;
+                }
             }
             return IntPtr.Zero;
         }
@@ -764,6 +831,8 @@ namespace AiAssistant
                 if (!string.IsNullOrEmpty(_viewModel.ResponseText))
                 {
                     _chatHistoryService?.AddMessage("assistant", _viewModel.ResponseText);
+                    // 最新の応答を保存（音声読み上げ用）
+                    _lastAssistantResponse = _viewModel.ResponseText;
                 }
             }
             catch (Exception ex)
@@ -1797,6 +1866,18 @@ namespace AiAssistant
             currencyItem.Click += (s, args) => OnCurrencyButtonClick(s, args);
             contextMenu.Items.Add(currencyItem);
 
+            contextMenu.Items.Add(new Separator());
+
+            // ポモドーロタイマー
+            var pomodoroItem = new MenuItem { Header = "🍅 ポモドーロタイマー" };
+            pomodoroItem.Click += (s, args) => ShowPomodoroMenu(button);
+            contextMenu.Items.Add(pomodoroItem);
+
+            // デイリーゴール
+            var goalsItem = new MenuItem { Header = "🎯 今日の目標" };
+            goalsItem.Click += (s, args) => ShowDailyGoalsMenu(button);
+            contextMenu.Items.Add(goalsItem);
+
             contextMenu.PlacementTarget = button;
             contextMenu.Placement = PlacementMode.Bottom;
             contextMenu.IsOpen = true;
@@ -1873,6 +1954,121 @@ namespace AiAssistant
             claudeItem.Click += async (s, args) => await ShowClaudeUsageInfoAsync();
             contextMenu.Items.Add(claudeItem);
 
+            contextMenu.Items.Add(new Separator());
+
+            // 音声入力
+            var voiceItem = new MenuItem { Header = "🎤 音声入力" };
+            voiceItem.Click += (s, args) => StartVoiceInput();
+            if (_voiceInputService == null || !_voiceInputService.IsAvailable)
+            {
+                voiceItem.IsEnabled = false;
+                voiceItem.Header = "🎤 音声入力 (利用不可)";
+            }
+            contextMenu.Items.Add(voiceItem);
+
+            // 音声出力（読み上げ）
+            var voiceOutputMenu = new MenuItem { Header = "🔊 音声読み上げ" };
+            if (_voiceOutputService != null && _voiceOutputService.IsAvailable)
+            {
+                var speakClipboardItem = new MenuItem { Header = "📋 選択テキストを読み上げ (Ctrl+Shift+S)" };
+                speakClipboardItem.Click += (s, args) => SpeakClipboardText();
+                voiceOutputMenu.Items.Add(speakClipboardItem);
+
+                var speakLastItem = new MenuItem { Header = "📢 最新の返答を読み上げ" };
+                speakLastItem.Click += (s, args) => SpeakLastResponse();
+                voiceOutputMenu.Items.Add(speakLastItem);
+
+                var stopSpeakItem = new MenuItem { Header = "⏹️ 読み上げ停止" };
+                stopSpeakItem.Click += (s, args) => _voiceOutputService?.Stop();
+                voiceOutputMenu.Items.Add(stopSpeakItem);
+
+                voiceOutputMenu.Items.Add(new Separator());
+
+                // 速度設定
+                var speedMenu = new MenuItem { Header = "⚡ 速度" };
+                var speeds = new[] { (-5, "遅い"), (0, "普通"), (3, "速い"), (6, "とても速い") };
+                foreach (var (rate, label) in speeds)
+                {
+                    var speedItem = new MenuItem
+                    {
+                        Header = label,
+                        IsChecked = _voiceOutputService.Rate == rate
+                    };
+                    var r = rate;
+                    speedItem.Click += (s, args) =>
+                    {
+                        _voiceOutputService.Rate = r;
+                        ShowTransientMessage($"読み上げ速度: {label}", 1500);
+                    };
+                    speedMenu.Items.Add(speedItem);
+                }
+                voiceOutputMenu.Items.Add(speedMenu);
+
+                // テスト読み上げ
+                var testItem = new MenuItem { Header = "🧪 テスト読み上げ" };
+                testItem.Click += (s, args) =>
+                {
+                    _voiceOutputService.SpeakAsync("こんにちは！音声出力のテストです。");
+                };
+                voiceOutputMenu.Items.Add(testItem);
+            }
+            else
+            {
+                voiceOutputMenu.IsEnabled = false;
+                voiceOutputMenu.Header = "🔊 音声読み上げ (利用不可)";
+            }
+            contextMenu.Items.Add(voiceOutputMenu);
+
+            // ミニゲーム
+            var gameItem = new MenuItem { Header = "🎮 じゃんけん" };
+            gameItem.Click += (s, args) => ShowMiniGameMenu(button);
+            contextMenu.Items.Add(gameItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // クリップボード履歴
+            var clipboardItem = new MenuItem { Header = "📋 クリップボード履歴" };
+            clipboardItem.Click += (s, args) => ShowClipboardHistoryMenu(button);
+            contextMenu.Items.Add(clipboardItem);
+
+            // クイックノート
+            var notesItem = new MenuItem { Header = "📝 クイックノート" };
+            notesItem.Click += (s, args) => ShowQuickNotesMenu(button);
+            contextMenu.Items.Add(notesItem);
+
+            // メディアコントロール
+            var mediaMenu = new MenuItem { Header = "🎵 メディア操作" };
+            var playPauseItem = new MenuItem { Header = "⏯️ 再生/一時停止" };
+            playPauseItem.Click += (s, args) => { _mediaControlService?.PlayPause(); ShowTransientMessage("⏯️ Play/Pause", 1000); };
+            var nextItem = new MenuItem { Header = "⏭️ 次の曲" };
+            nextItem.Click += (s, args) => { _mediaControlService?.NextTrack(); ShowTransientMessage("⏭️ Next", 1000); };
+            var prevItem = new MenuItem { Header = "⏮️ 前の曲" };
+            prevItem.Click += (s, args) => { _mediaControlService?.PreviousTrack(); ShowTransientMessage("⏮️ Previous", 1000); };
+            var volUpItem = new MenuItem { Header = "🔊 音量+" };
+            volUpItem.Click += (s, args) => { _mediaControlService?.VolumeUp(); };
+            var volDownItem = new MenuItem { Header = "🔉 音量-" };
+            volDownItem.Click += (s, args) => { _mediaControlService?.VolumeDown(); };
+            var muteItem = new MenuItem { Header = "🔇 ミュート" };
+            muteItem.Click += (s, args) => { _mediaControlService?.ToggleMute(); ShowTransientMessage("🔇 Mute Toggle", 1000); };
+            mediaMenu.Items.Add(playPauseItem);
+            mediaMenu.Items.Add(nextItem);
+            mediaMenu.Items.Add(prevItem);
+            mediaMenu.Items.Add(new Separator());
+            mediaMenu.Items.Add(volUpItem);
+            mediaMenu.Items.Add(volDownItem);
+            mediaMenu.Items.Add(muteItem);
+            contextMenu.Items.Add(mediaMenu);
+
+            // スクリーンショット
+            var screenshotMenu = new MenuItem { Header = "📸 スクリーンショット" };
+            var captureFullItem = new MenuItem { Header = "🖥️ 全画面" };
+            captureFullItem.Click += (s, args) => CaptureScreenshot(false);
+            var captureWindowItem = new MenuItem { Header = "🪟 アクティブウィンドウ" };
+            captureWindowItem.Click += (s, args) => CaptureScreenshot(true);
+            screenshotMenu.Items.Add(captureFullItem);
+            screenshotMenu.Items.Add(captureWindowItem);
+            contextMenu.Items.Add(screenshotMenu);
+
             contextMenu.PlacementTarget = button;
             contextMenu.Placement = PlacementMode.Bottom;
             contextMenu.IsOpen = true;
@@ -1946,6 +2142,11 @@ namespace AiAssistant
 
             contextMenu.Items.Add(new Separator());
 
+            // ホットキーヘルプ
+            var hotkeyHelpItem = new MenuItem { Header = "⌨️ ホットキー一覧" };
+            hotkeyHelpItem.Click += (s, args) => ShowHotkeyHelp();
+            contextMenu.Items.Add(hotkeyHelpItem);
+
             // 設定ウィンドウ
             var settingsWindowItem = new MenuItem { Header = "🔧 設定ウィンドウ" };
             settingsWindowItem.Click += (s, args) => OpenSettingsWindow();
@@ -1954,6 +2155,33 @@ namespace AiAssistant
             contextMenu.PlacementTarget = button;
             contextMenu.Placement = PlacementMode.Bottom;
             contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// ホットキー一覧を表示します
+        /// </summary>
+        private void ShowHotkeyHelp()
+        {
+            var helpText = @"⌨️ ホットキー一覧
+
+📸 Ctrl+Shift+P
+   → スクリーンショット撮影
+
+🔊 Ctrl+Shift+S
+   → 選択テキストを読み上げ
+
+🌐 Ctrl+Shift+T
+   → 選択テキストを翻訳
+
+👆 Ctrl+Alt+T
+   → クリックスルー切替
+   （ウィンドウを透過）
+
+💡 使い方:
+・スクリーンショット: 任意のウィンドウでホットキーを押す
+・読み上げ/翻訳: テキスト選択→Ctrl+C→ホットキー";
+
+            OpenChatAndShowMessage(helpText);
         }
 
         /// <summary>
@@ -2744,6 +2972,678 @@ namespace AiAssistant
             ChatMessagesPanel.Children.Add(messageContainer);
 
             ScrollChatToBottom();
+        }
+
+        #endregion
+
+        #region Pomodoro Timer Handlers
+
+        /// <summary>
+        /// ポモドーロタイマーの更新時に呼び出されます
+        /// </summary>
+        private void OnPomodoroTick(object? sender, PomodoroTickEventArgs e)
+        {
+            // タイトルまたはトランジェントメッセージで残り時間を表示
+            var timeText = _pomodoroService?.GetTimeDisplayText() ?? "00:00";
+            var stateText = _pomodoroService?.GetStateDisplayText() ?? "";
+            TransientMessage.Text = $"{stateText} {timeText}";
+            TransientBorder.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>
+        /// ポモドーロタイマーの状態変化時に呼び出されます
+        /// </summary>
+        private void OnPomodoroStateChanged(object? sender, PomodoroStateChangedEventArgs e)
+        {
+            if (e.NewState == PomodoroState.Stopped)
+            {
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>
+        /// ポモドーロが完了したときに呼び出されます
+        /// </summary>
+        private void OnPomodoroCompleted(object? sender, PomodoroCompletedEventArgs e)
+        {
+            var message = e.WasWorkSession
+                ? $"🍅 ポモドーロ {e.TotalCompleted} 完了！休憩を取りましょう。"
+                : "☕ 休憩終了！作業を再開しましょう。";
+
+            OpenChatAndShowMessage(message);
+        }
+
+        /// <summary>
+        /// ポモドーロメニューを表示します
+        /// </summary>
+        private void ShowPomodoroMenu(Button button)
+        {
+            var contextMenu = new ContextMenu();
+
+            if (_pomodoroService == null) return;
+
+            var state = _pomodoroService.State;
+
+            if (state == PomodoroState.Stopped)
+            {
+                var startWorkItem = new MenuItem { Header = "🍅 作業開始 (25分)" };
+                startWorkItem.Click += (s, e) =>
+                {
+                    _pomodoroService.StartWork();
+                    ShowTransientMessage("🍅 作業開始！25分集中しましょう", 3000);
+                };
+                contextMenu.Items.Add(startWorkItem);
+
+                var startBreakItem = new MenuItem { Header = "☕ 休憩開始" };
+                startBreakItem.Click += (s, e) =>
+                {
+                    _pomodoroService.StartBreak();
+                    ShowTransientMessage("☕ 休憩開始！", 3000);
+                };
+                contextMenu.Items.Add(startBreakItem);
+
+                contextMenu.Items.Add(new Separator());
+
+                // カスタムリマインダー
+                var reminderMenu = new MenuItem { Header = "⏰ リマインダー設定" };
+                var reminders = new[] { (5, "5分後"), (10, "10分後"), (15, "15分後"), (30, "30分後"), (60, "1時間後") };
+                foreach (var (minutes, label) in reminders)
+                {
+                    var reminderItem = new MenuItem { Header = label };
+                    var min = minutes;
+                    reminderItem.Click += (s, e) =>
+                    {
+                        _pomodoroService.SetReminder(min, $"⏰ {label}のリマインダー", msg =>
+                        {
+                            OpenChatAndShowMessage(msg);
+                        });
+                        ShowTransientMessage($"⏰ {label}にリマインダーを設定しました", 2000);
+                    };
+                    reminderMenu.Items.Add(reminderItem);
+                }
+                contextMenu.Items.Add(reminderMenu);
+            }
+            else if (state == PomodoroState.Paused)
+            {
+                var resumeItem = new MenuItem { Header = "▶️ 再開" };
+                resumeItem.Click += (s, e) => _pomodoroService.Resume();
+                contextMenu.Items.Add(resumeItem);
+
+                var stopItem = new MenuItem { Header = "⏹️ 停止" };
+                stopItem.Click += (s, e) =>
+                {
+                    _pomodoroService.Stop();
+                    ShowTransientMessage("タイマーを停止しました", 2000);
+                };
+                contextMenu.Items.Add(stopItem);
+            }
+            else
+            {
+                var pauseItem = new MenuItem { Header = "⏸️ 一時停止" };
+                pauseItem.Click += (s, e) => _pomodoroService.Pause();
+                contextMenu.Items.Add(pauseItem);
+
+                var stopItem = new MenuItem { Header = "⏹️ 停止" };
+                stopItem.Click += (s, e) =>
+                {
+                    _pomodoroService.Stop();
+                    ShowTransientMessage("タイマーを停止しました", 2000);
+                };
+                contextMenu.Items.Add(stopItem);
+            }
+
+            contextMenu.Items.Add(new Separator());
+
+            // 統計
+            var statsItem = new MenuItem { Header = $"📊 完了: {_pomodoroService.CompletedPomodoros} ポモドーロ" };
+            statsItem.IsEnabled = false;
+            contextMenu.Items.Add(statsItem);
+
+            var resetCountItem = new MenuItem { Header = "🔄 カウントリセット" };
+            resetCountItem.Click += (s, e) =>
+            {
+                _pomodoroService.ResetCount();
+                ShowTransientMessage("カウントをリセットしました", 2000);
+            };
+            contextMenu.Items.Add(resetCountItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        #endregion
+
+        #region Mini Game Handlers
+
+        /// <summary>
+        /// じゃんけんゲームメニューを表示します
+        /// </summary>
+        private void ShowMiniGameMenu(Button button)
+        {
+            if (_miniGameService == null) return;
+
+            var contextMenu = new ContextMenu();
+
+            var titleItem = new MenuItem { Header = "🎮 ペットとじゃんけん！", IsEnabled = false };
+            contextMenu.Items.Add(titleItem);
+            contextMenu.Items.Add(new Separator());
+
+            // じゃんけんの選択肢
+            var rockItem = new MenuItem { Header = "✊ グー" };
+            rockItem.Click += (s, e) => PlayRockPaperScissors(RpsChoice.Rock);
+            contextMenu.Items.Add(rockItem);
+
+            var paperItem = new MenuItem { Header = "✋ パー" };
+            paperItem.Click += (s, e) => PlayRockPaperScissors(RpsChoice.Paper);
+            contextMenu.Items.Add(paperItem);
+
+            var scissorsItem = new MenuItem { Header = "✌️ チョキ" };
+            scissorsItem.Click += (s, e) => PlayRockPaperScissors(RpsChoice.Scissors);
+            contextMenu.Items.Add(scissorsItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // 戦績
+            var statsItem = new MenuItem { Header = _miniGameService.GetStatsText(), IsEnabled = false };
+            contextMenu.Items.Add(statsItem);
+
+            var resetItem = new MenuItem { Header = "🔄 戦績リセット" };
+            resetItem.Click += (s, e) =>
+            {
+                _miniGameService.ResetStats();
+                ShowTransientMessage("戦績をリセットしました", 2000);
+            };
+            contextMenu.Items.Add(resetItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// じゃんけんをプレイします
+        /// </summary>
+        private void PlayRockPaperScissors(RpsChoice playerChoice)
+        {
+            if (_miniGameService == null) return;
+
+            var result = _miniGameService.PlayRockPaperScissors(playerChoice);
+            var detailText = result.GetDetailText();
+            var petReaction = _miniGameService.GetPetReaction(result.Result);
+
+            var message = $"{detailText}\n\n🐾 ペット「{petReaction}」\n\n{_miniGameService.GetStatsText()}";
+            OpenChatAndShowMessage(message);
+        }
+
+        #endregion
+
+        #region Voice Input/Output Handlers
+
+        /// <summary>
+        /// 最後の応答を保存するフィールド
+        /// </summary>
+        private string? _lastAssistantResponse;
+
+        /// <summary>
+        /// 音声認識が完了したときに呼び出されます
+        /// </summary>
+        private void OnVoiceRecognized(object? sender, VoiceRecognizedEventArgs e)
+        {
+            // 認識されたテキストを入力欄に設定
+            ChatInputBox.Text = e.Text;
+            ShowTransientMessage($"🎤 認識完了 (信頼度: {e.Confidence:P0})", 2000);
+
+            // 信頼度が高ければ自動送信
+            if (e.Confidence >= 0.8f)
+            {
+                OnSendMessageClick(this, new RoutedEventArgs());
+            }
+        }
+
+        /// <summary>
+        /// 音声認識エラー時に呼び出されます
+        /// </summary>
+        private void OnVoiceError(object? sender, string error)
+        {
+            ShowTransientMessage($"⚠️ {error}", 3000);
+        }
+
+        /// <summary>
+        /// 音声入力を開始します
+        /// </summary>
+        private void StartVoiceInput()
+        {
+            if (_voiceInputService == null)
+            {
+                ShowTransientMessage("音声入力サービスが利用できません", 2000);
+                return;
+            }
+
+            if (!_voiceInputService.IsAvailable)
+            {
+                ShowTransientMessage("音声認識エンジンが見つかりません", 2000);
+                return;
+            }
+
+            // チャットを開く
+            if (!_isChatOpen)
+            {
+                _isChatOpen = true;
+                ChatBalloon.Visibility = Visibility.Visible;
+            }
+
+            _voiceInputService.StartListening();
+            ShowTransientMessage("🎤 話してください...", 10000);
+        }
+
+        /// <summary>
+        /// 最新のAI応答を読み上げます
+        /// </summary>
+        private void SpeakLastResponse()
+        {
+            if (_voiceOutputService == null || !_voiceOutputService.IsAvailable)
+            {
+                ShowTransientMessage("音声出力が利用できません", 2000);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_lastAssistantResponse))
+            {
+                ShowTransientMessage("読み上げる応答がありません", 2000);
+                return;
+            }
+
+            ShowTransientMessage("🔊 読み上げ中...", 5000);
+            _voiceOutputService.SpeakAsync(_lastAssistantResponse);
+        }
+
+        /// <summary>
+        /// 指定したテキストを読み上げます
+        /// </summary>
+        private void SpeakText(string text)
+        {
+            if (_voiceOutputService == null || !_voiceOutputService.IsAvailable)
+            {
+                return;
+            }
+
+            _voiceOutputService.SpeakAsync(text);
+        }
+
+        /// <summary>
+        /// クリップボードのテキストを読み上げます（ホットキー用）
+        /// </summary>
+        private void SpeakClipboardText()
+        {
+            if (_voiceOutputService == null || !_voiceOutputService.IsAvailable)
+            {
+                ShowTransientMessage("音声出力が利用できません", 2000);
+                return;
+            }
+
+            var text = GetClipboardText();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                ShowTransientMessage("読み上げるテキストがありません", 2000);
+                return;
+            }
+
+            // 長すぎるテキストは警告
+            if (text.Length > 5000)
+            {
+                ShowTransientMessage("⚠️ テキストが長すぎます（最初の5000文字のみ読み上げ）", 2000);
+                text = text[..5000];
+            }
+
+            ShowTransientMessage($"🔊 読み上げ中... ({text.Length}文字)", 3000);
+            _voiceOutputService.SpeakAsync(text);
+        }
+
+        #endregion
+
+        #region Clipboard History Handlers
+
+        /// <summary>
+        /// クリップボード履歴メニューを表示
+        /// </summary>
+        private void ShowClipboardHistoryMenu(Button button)
+        {
+            if (_clipboardHistoryService == null) return;
+
+            // 現在のクリップボードをチェック
+            _clipboardHistoryService.CheckAndAddFromClipboard();
+
+            var contextMenu = new ContextMenu();
+
+            var titleItem = new MenuItem { Header = $"📋 履歴 ({_clipboardHistoryService.Count}件)", IsEnabled = false };
+            contextMenu.Items.Add(titleItem);
+            contextMenu.Items.Add(new Separator());
+
+            if (_clipboardHistoryService.Count == 0)
+            {
+                var emptyItem = new MenuItem { Header = "履歴がありません", IsEnabled = false };
+                contextMenu.Items.Add(emptyItem);
+            }
+            else
+            {
+                for (int i = 0; i < Math.Min(_clipboardHistoryService.History.Count, 10); i++)
+                {
+                    var item = _clipboardHistoryService.History[i];
+                    var index = i;
+                    var menuItem = new MenuItem
+                    {
+                        Header = $"{i + 1}. {item.Preview}",
+                        ToolTip = item.Text.Length > 200 ? item.Text[..200] + "..." : item.Text
+                    };
+                    menuItem.Click += (s, e) =>
+                    {
+                        _clipboardHistoryService.CopyFromHistory(index);
+                        ShowTransientMessage("📋 クリップボードにコピーしました", 1500);
+                    };
+                    contextMenu.Items.Add(menuItem);
+                }
+
+                contextMenu.Items.Add(new Separator());
+
+                var clearItem = new MenuItem { Header = "🗑️ 履歴をクリア" };
+                clearItem.Click += (s, e) =>
+                {
+                    _clipboardHistoryService.Clear();
+                    ShowTransientMessage("履歴をクリアしました", 1500);
+                };
+                contextMenu.Items.Add(clearItem);
+            }
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        #endregion
+
+        #region Quick Notes Handlers
+
+        /// <summary>
+        /// クイックノートメニューを表示
+        /// </summary>
+        private void ShowQuickNotesMenu(Button button)
+        {
+            if (_quickNotesService == null) return;
+
+            var contextMenu = new ContextMenu();
+
+            var titleItem = new MenuItem { Header = $"📝 ノート ({_quickNotesService.Count}件)", IsEnabled = false };
+            contextMenu.Items.Add(titleItem);
+
+            // 新規ノート追加
+            var addItem = new MenuItem { Header = "➕ 新しいノートを追加" };
+            addItem.Click += (s, e) => ShowAddNoteDialog();
+            contextMenu.Items.Add(addItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            if (_quickNotesService.Count == 0)
+            {
+                var emptyItem = new MenuItem { Header = "ノートがありません", IsEnabled = false };
+                contextMenu.Items.Add(emptyItem);
+            }
+            else
+            {
+                foreach (var note in _quickNotesService.Notes.Take(10))
+                {
+                    var noteMenu = new MenuItem
+                    {
+                        Header = (note.IsPinned ? "📌 " : "") + note.Preview
+                    };
+
+                    var viewItem = new MenuItem { Header = "👁️ 表示" };
+                    viewItem.Click += (s, e) => OpenChatAndShowMessage($"📝 ノート:\n{note.Content}");
+
+                    var copyItem = new MenuItem { Header = "📋 コピー" };
+                    copyItem.Click += (s, e) =>
+                    {
+                        System.Windows.Clipboard.SetText(note.Content);
+                        ShowTransientMessage("ノートをコピーしました", 1500);
+                    };
+
+                    var pinItem = new MenuItem { Header = note.IsPinned ? "📌 ピン解除" : "📌 ピン留め" };
+                    var noteId = note.Id;
+                    pinItem.Click += (s, e) => _quickNotesService.TogglePin(noteId);
+
+                    var deleteItem = new MenuItem { Header = "🗑️ 削除" };
+                    deleteItem.Click += (s, e) =>
+                    {
+                        _quickNotesService.DeleteNote(noteId);
+                        ShowTransientMessage("ノートを削除しました", 1500);
+                    };
+
+                    noteMenu.Items.Add(viewItem);
+                    noteMenu.Items.Add(copyItem);
+                    noteMenu.Items.Add(pinItem);
+                    noteMenu.Items.Add(new Separator());
+                    noteMenu.Items.Add(deleteItem);
+
+                    contextMenu.Items.Add(noteMenu);
+                }
+            }
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// ノート追加ダイアログを表示
+        /// </summary>
+        private void ShowAddNoteDialog()
+        {
+            var input = InputDialog.Show("📝 新しいノート", "ノートの内容を入力してください:", "", this);
+            if (!string.IsNullOrWhiteSpace(input))
+            {
+                _quickNotesService?.AddNote(input);
+                ShowTransientMessage("📝 ノートを追加しました", 1500);
+            }
+        }
+
+        #endregion
+
+        #region Daily Goals Handlers
+
+        /// <summary>
+        /// デイリーゴールメニューを表示
+        /// </summary>
+        private void ShowDailyGoalsMenu(Button button)
+        {
+            if (_dailyGoalsService == null) return;
+
+            var contextMenu = new ContextMenu();
+
+            // 進捗表示
+            var progressItem = new MenuItem { Header = _dailyGoalsService.GetProgressText(), IsEnabled = false };
+            contextMenu.Items.Add(progressItem);
+
+            var motivationItem = new MenuItem { Header = _dailyGoalsService.GetMotivationMessage(), IsEnabled = false };
+            contextMenu.Items.Add(motivationItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // 新規目標追加
+            var addItem = new MenuItem { Header = "➕ 新しい目標を追加" };
+            addItem.Click += (s, e) => ShowAddGoalDialog();
+            contextMenu.Items.Add(addItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            if (_dailyGoalsService.Goals.Count == 0)
+            {
+                var emptyItem = new MenuItem { Header = "目標がありません", IsEnabled = false };
+                contextMenu.Items.Add(emptyItem);
+            }
+            else
+            {
+                foreach (var goal in _dailyGoalsService.Goals)
+                {
+                    var emoji = goal.IsCompleted ? "✅" : "⬜";
+                    var streakText = goal.Streak > 0 ? $" 🔥{goal.Streak}" : "";
+                    var goalItem = new MenuItem
+                    {
+                        Header = $"{emoji} {goal.Title}{streakText}"
+                    };
+
+                    var goalId = goal.Id;
+                    goalItem.Click += (s, e) =>
+                    {
+                        _dailyGoalsService.ToggleGoal(goalId);
+                        var newState = _dailyGoalsService.Goals.FirstOrDefault(g => g.Id == goalId)?.IsCompleted ?? false;
+                        ShowTransientMessage(newState ? "✅ 完了！" : "⬜ 未完了に戻しました", 1500);
+                    };
+
+                    contextMenu.Items.Add(goalItem);
+                }
+
+                contextMenu.Items.Add(new Separator());
+
+                // 全目標削除
+                var clearItem = new MenuItem { Header = "🗑️ すべての目標を削除" };
+                clearItem.Click += (s, e) =>
+                {
+                    foreach (var goal in _dailyGoalsService.Goals.ToList())
+                    {
+                        _dailyGoalsService.DeleteGoal(goal.Id);
+                    }
+                    ShowTransientMessage("目標をすべて削除しました", 1500);
+                };
+                contextMenu.Items.Add(clearItem);
+            }
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// 目標追加ダイアログを表示
+        /// </summary>
+        private void ShowAddGoalDialog()
+        {
+            var input = InputDialog.Show("🎯 新しい目標", "今日の目標を入力してください:", "", this);
+            if (!string.IsNullOrWhiteSpace(input))
+            {
+                _dailyGoalsService?.AddGoal(input);
+                ShowTransientMessage("🎯 目標を追加しました", 1500);
+            }
+        }
+
+        #endregion
+
+        #region Screenshot Handlers
+
+        /// <summary>
+        /// スクリーンショットを撮影（メニューから呼び出し）
+        /// </summary>
+        private void CaptureScreenshot(bool activeWindowOnly)
+        {
+            if (_screenshotService == null) return;
+
+            try
+            {
+                // アシスタントウィンドウを一時的に非表示にする
+                var wasVisible = this.Visibility == Visibility.Visible;
+                if (activeWindowOnly && wasVisible)
+                {
+                    this.Visibility = Visibility.Hidden;
+                }
+
+                // 少し待ってからキャプチャ（メニューが閉じる＆ウィンドウが非表示になるのを待つ）
+                System.Threading.Tasks.Task.Delay(400).ContinueWith(_ =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var bitmap = activeWindowOnly
+                            ? _screenshotService.CaptureActiveWindow()
+                            : _screenshotService.CaptureFullScreen();
+
+                        // ウィンドウを再表示
+                        if (wasVisible)
+                        {
+                            this.Visibility = Visibility.Visible;
+                        }
+
+                        if (bitmap != null)
+                        {
+                            // クリップボードにコピー
+                            _screenshotService.CopyToClipboard(bitmap);
+
+                            // ファイルに保存
+                            var path = _screenshotService.SaveToFile(bitmap);
+
+                            ShowTransientMessage($"📸 スクリーンショットを保存しました", 2000);
+
+                            bitmap.Dispose();
+                        }
+                        else
+                        {
+                            ShowTransientMessage("スクリーンショットの撮影に失敗しました", 2000);
+                        }
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"エラー: {ex.Message}", 2000);
+            }
+        }
+
+        /// <summary>
+        /// ホットキーからスクリーンショットを撮影（アクティブウィンドウのみ）
+        /// </summary>
+        private void CaptureScreenshotWithHotkey()
+        {
+            if (_screenshotService == null) return;
+
+            try
+            {
+                // アシスタントウィンドウを一時的に非表示にする
+                var wasVisible = this.Visibility == Visibility.Visible;
+                this.Visibility = Visibility.Hidden;
+
+                // 少し待ってからキャプチャ（ウィンドウが非表示になるのを待つ）
+                System.Threading.Tasks.Task.Delay(200).ContinueWith(_ =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var bitmap = _screenshotService.CaptureActiveWindow();
+
+                        // ウィンドウを再表示
+                        if (wasVisible)
+                        {
+                            this.Visibility = Visibility.Visible;
+                        }
+
+                        if (bitmap != null)
+                        {
+                            // クリップボードにコピー
+                            _screenshotService.CopyToClipboard(bitmap);
+
+                            // ファイルに保存
+                            var path = _screenshotService.SaveToFile(bitmap);
+
+                            ShowTransientMessage($"📸 スクリーンショットを保存しました", 2000);
+
+                            bitmap.Dispose();
+                        }
+                        else
+                        {
+                            ShowTransientMessage("スクリーンショットの撮影に失敗しました", 2000);
+                        }
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"エラー: {ex.Message}", 2000);
+            }
         }
 
         #endregion
