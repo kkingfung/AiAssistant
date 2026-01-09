@@ -5,7 +5,7 @@ using System.Windows.Input;
 
 namespace AiAssistant
 {
-    // Â²³æª¬ºA¦CÁ|
+    // Â²ï¿½æª¬ï¿½Aï¿½Cï¿½|
     public enum AssistantState
     {
         Idle,
@@ -15,13 +15,18 @@ namespace AiAssistant
     }
 
     /// <summary>
-    /// Â²¤Æªº ViewModel¡A¥Ü½d«D¦P¨B©I¥s IAiService¡]¤£ªı¶ë UI¡^¨Ã¤ä´©¦ê¬y»P¨ú®ø¡C
-    /// ¥iª½±µ³]©w¬° Window.DataContext¡C
+    /// Â²ï¿½Æªï¿½ ViewModelï¿½Aï¿½Ü½dï¿½Dï¿½Pï¿½Bï¿½Iï¿½s IAiServiceï¿½]ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ UIï¿½^ï¿½Ã¤ä´©ï¿½ï¿½yï¿½Pï¿½ï¿½ï¿½ï¿½ï¿½C
+    /// ï¿½iï¿½ï¿½ï¿½ï¿½ï¿½]ï¿½wï¿½ï¿½ Window.DataContextï¿½C
     /// </summary>
     public sealed class AssistantViewModel : INotifyPropertyChanged
     {
         private readonly IAiService _aiService;
         private CancellationTokenSource? _cts;
+
+        /// <summary>
+        /// ä½¿ç”¨ä¸­ã®AIã‚µãƒ¼ãƒ“ã‚¹ã‚’å–å¾—ã—ã¾ã™
+        /// </summary>
+        public IAiService AiService => _aiService;
 
         private AssistantState _state = AssistantState.Idle;
         public AssistantState State
@@ -54,7 +59,7 @@ namespace AiAssistant
             CancelCommand = new DelegateCommand(_ => Cancel(), _ => State == AssistantState.Thinking || State == AssistantState.Listening);
         }
 
-        // «D¦P¨B¤@¦¸©Ê¦^À³¡]UI thread-safe: await will resume on UI context¡^
+        // ï¿½Dï¿½Pï¿½Bï¿½@ï¿½ï¿½ï¿½Ê¦^ï¿½ï¿½ï¿½]UI thread-safe: await will resume on UI contextï¿½^
         public async Task SendPromptAsync(string prompt)
         {
             if (string.IsNullOrWhiteSpace(prompt)) return;
@@ -67,33 +72,33 @@ namespace AiAssistant
                 await Task.Delay(80, _cts.Token).ConfigureAwait(true); // small UX delay to show state
                 State = AssistantState.Thinking;
 
-                // «D¦P¨B¨ú±o§¹¾ã¦^À³¡]MockAiService ¼ÒÀÀ©µ¿ğ¡^
+                // ï¿½Dï¿½Pï¿½Bï¿½ï¿½ï¿½oï¿½ï¿½ï¿½ï¿½^ï¿½ï¿½ï¿½]MockAiService ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½^
                 var result = await _aiService.GetResponseAsync(prompt, _cts.Token).ConfigureAwait(false);
 
-                // ¤Á¦^ UI °õ¦æÄò§ó·s UI Äİ©Ê
+                // ï¿½ï¿½ï¿½^ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½s UI ï¿½İ©ï¿½
                 await ApplicationCurrentInvokeAsync(() =>
                 {
                     ResponseText = result;
                     State = AssistantState.Speaking;
                 }).ConfigureAwait(false);
 
-                // µy«á¦^¨ì Idle
+                // ï¿½yï¿½ï¿½^ï¿½ï¿½ Idle
                 await Task.Delay(300, _cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // ¨Ï¥ÎªÌ¤w¨ú®ø¡A«O«ù©Î­«³]ª¬ºA
+                // ï¿½Ï¥ÎªÌ¤wï¿½ï¿½ï¿½ï¿½ï¿½Aï¿½Oï¿½ï¿½ï¿½Î­ï¿½ï¿½]ï¿½ï¿½ï¿½A
             }
             finally
             {
-                // ¦^¨ì UI °õ¦æÄò²M²z/³]©w Idle
+                // ï¿½^ï¿½ï¿½ UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Mï¿½z/ï¿½]ï¿½w Idle
                 await ApplicationCurrentInvokeAsync(() => State = AssistantState.Idle).ConfigureAwait(false);
                 _cts?.Dispose();
                 _cts = null;
             }
         }
 
-        // «D¦P¨B¦ê¬y¦^À³¡]³v¬qÅã¥Ü¡^
+        // ï¿½Dï¿½Pï¿½Bï¿½ï¿½yï¿½^ï¿½ï¿½ï¿½]ï¿½vï¿½qï¿½ï¿½Ü¡^
         public async Task StreamPromptAsync(string prompt)
         {
             if (string.IsNullOrWhiteSpace(prompt)) return;
@@ -110,20 +115,20 @@ namespace AiAssistant
 
                 await foreach (var chunk in _aiService.StreamResponseAsync(prompt, _cts.Token))
                 {
-                    // ¨C­Ó chunk ³£¥H UI °õ¦æÄò§ó·s
+                    // ï¿½Cï¿½ï¿½ chunk ï¿½ï¿½ï¿½H UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½s
                     await ApplicationCurrentInvokeAsync(() =>
                     {
                         ResponseText += (ResponseText.Length == 0 ? "" : " ") + chunk;
                     }).ConfigureAwait(false);
                 }
 
-                // §¹¦¨«á¼Ğ¥Ü¬° Speaking¡]©Îª½±µ Idle¡^
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ğ¥Ü¬ï¿½ Speakingï¿½]ï¿½Îªï¿½ï¿½ï¿½ Idleï¿½^
                 await ApplicationCurrentInvokeAsync(() => State = AssistantState.Speaking).ConfigureAwait(false);
                 await Task.Delay(300, _cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // ¨ú®ø
+                // ï¿½ï¿½ï¿½ï¿½
             }
             finally
             {
@@ -142,7 +147,7 @@ namespace AiAssistant
             catch { }
         }
 
-        // À°§U¨ç¦¡¡G½T«O¦b UI °õ¦æÄò°õ¦æ action
+        // ï¿½ï¿½ï¿½Uï¿½ç¦¡ï¿½Gï¿½Tï¿½Oï¿½b UI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ action
         private static Task ApplicationCurrentInvokeAsync(Action action)
         {
             var tcs = new TaskCompletionSource<object?>();
@@ -167,7 +172,7 @@ namespace AiAssistant
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
-    // Â²¼ä DelegateCommand¡A«O¯d³Ì¤p¹ê§@
+    // Â²ï¿½ï¿½ DelegateCommandï¿½Aï¿½Oï¿½dï¿½Ì¤pï¿½ï¿½@
     internal sealed class DelegateCommand : ICommand
     {
         private readonly Func<object?, Task>? _executeAsync;

@@ -42,6 +42,30 @@ namespace AiAssistant
                 }
             }
 
+            // Claude APIを試す
+            if (settings.Claude.IsConfigured)
+            {
+                try
+                {
+                    var claudeService = new ClaudeAiService();
+                    return (claudeService, $"Claude ({settings.Claude.Model})");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Claudeサービス作成失敗: {ex.Message}");
+                }
+            }
+
+            // LM Studioを試す
+            if (settings.LmStudio.ShouldUse)
+            {
+                var (lmStudioService, serviceType) = await TryCreateLmStudioServiceAsync();
+                if (lmStudioService != null)
+                {
+                    return (lmStudioService, serviceType);
+                }
+            }
+
             // フォールバック: Mockサービス
             return (new MockAiService(), "Mock (Demo)");
         }
@@ -158,6 +182,48 @@ namespace AiAssistant
             if (await OllamaAiService.IsOllamaAvailableAsync(settings.Endpoint))
             {
                 return await OllamaAiService.GetAvailableModelsAsync(settings.Endpoint);
+            }
+
+            return new System.Collections.Generic.List<string>();
+        }
+
+        /// <summary>
+        /// LM Studioサービスの作成を試みます
+        /// </summary>
+        private static async Task<(IAiService? service, string serviceType)> TryCreateLmStudioServiceAsync()
+        {
+            var settings = AppSettings.Instance.LmStudio;
+
+            Console.WriteLine($"[Factory] LM Studio初期化開始 - Endpoint: {settings.Endpoint}");
+
+            // LM Studioが実行中かチェック
+            bool lmStudioAvailable = await LmStudioAiService.IsLmStudioAvailableAsync(settings.Endpoint);
+            Console.WriteLine($"[Factory] LM Studio利用可能: {lmStudioAvailable}");
+
+            if (!lmStudioAvailable)
+            {
+                System.Diagnostics.Debug.WriteLine("LM Studioが実行されていません");
+                return (null, string.Empty);
+            }
+
+            // LM Studioサービスを作成
+            var service = new LmStudioAiService(settings.Endpoint, settings.Model);
+            var serviceType = $"LM Studio ({settings.Model})";
+
+            Console.WriteLine($"[Factory] LM Studioサービス作成成功: {serviceType}");
+            return (service, serviceType);
+        }
+
+        /// <summary>
+        /// 利用可能なLM Studioモデルのリストを取得します
+        /// </summary>
+        public static async Task<System.Collections.Generic.List<string>> GetAvailableLmStudioModelsAsync()
+        {
+            var settings = AppSettings.Instance.LmStudio;
+
+            if (await LmStudioAiService.IsLmStudioAvailableAsync(settings.Endpoint))
+            {
+                return await LmStudioAiService.GetAvailableModelsAsync(settings.Endpoint);
             }
 
             return new System.Collections.Generic.List<string>();

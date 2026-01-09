@@ -28,40 +28,6 @@
                     VerticalAlignment="Top"
                     Margin="5"
                     Panel.ZIndex="100">
-            <!-- ペット選択ボタン -->
-            <Button Content="🐾"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,5,0"
-                    Background="#88000000"
-                    Foreground="White"
-                    BorderThickness="0"
-                    FontSize="16"
-                    Cursor="Hand"
-                    Click="OnPetSelectorButtonClick"
-                    ToolTip="ペットを変更">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="14">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CC9370DB"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
-
             <!-- チャットボタン -->
             <Button Content="💬"
                     Width="28"
@@ -137,8 +103,8 @@
                     VerticalAlignment="Top"
                     Margin="0,40,5,0"
                     Panel.ZIndex="100">
-            <!-- カレンダーボタン -->
-            <Button Content="📅"
+            <!-- クイックアクションメニュー（情報系） -->
+            <Button Content="⚡"
                     Width="28"
                     Height="28"
                     Margin="0,0,0,3"
@@ -147,8 +113,8 @@
                     BorderThickness="0"
                     FontSize="14"
                     Cursor="Hand"
-                    Click="OnCalendarButtonClick"
-                    ToolTip="カレンダー">
+                    Click="OnQuickActionsButtonClick"
+                    ToolTip="クイックアクション">
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Template">
@@ -171,18 +137,18 @@
                 </Button.Style>
             </Button>
 
-            <!-- 天気ボタン -->
-            <Button Content="🌤"
+            <!-- ツールメニュー（開発・連携系） -->
+            <Button Content="🔧"
                     Width="28"
                     Height="28"
                     Margin="0,0,0,3"
-                    Background="#88FF8C00"
+                    Background="#88333333"
                     Foreground="White"
                     BorderThickness="0"
                     FontSize="14"
                     Cursor="Hand"
-                    Click="OnWeatherButtonClick"
-                    ToolTip="天気">
+                    Click="OnToolsButtonClick"
+                    ToolTip="ツール">
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Template">
@@ -198,155 +164,19 @@
                         </Setter>
                         <Style.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CCFFA500"/>
+                                <Setter Property="Background" Value="#CC555555"/>
                             </Trigger>
                         </Style.Triggers>
                     </Style>
                 </Button.Style>
             </Button>
 
-            <!-- ファンドボタン -->
-            <Button Content="💹"
+            <!-- 設定メニュー -->
+            <Button Content="⚙️"
                     Width="28"
                     Height="28"
                     Margin="0,0,0,3"
-                    Background="#88DC143C"
-                    Foreground="White"
-                    BorderThickness="0"
-                    FontSize="14"
-                    Cursor="Hand"
-                    Click="OnFundButtonClick"
-                    ToolTip="ファンド情報">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="14">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CCFF1493"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
-
-            <!-- Gmailボタン -->
-            <Button Content="📧"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,0,3"
-                    Background="#88EA4335"
-                    Foreground="White"
-                    BorderThickness="0"
-                    FontSize="14"
-                    Cursor="Hand"
-                    Click="OnGmailButtonClick"
-                    ToolTip="Gmail">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="14">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CCFF6347"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
-
-            <!-- 為替レートボタン -->
-            <Button Content="💱"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,0,3"
-                    Background="#884169E1"
-                    Foreground="White"
-                    BorderThickness="0"
-                    FontSize="14"
-                    Cursor="Hand"
-                    Click="OnCurrencyButtonClick"
-                    ToolTip="為替レート">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="14">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CC6A5ACD"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
-
-            <!-- Claude使用量ボタン -->
-            <Button Content="📊"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,0,3"
-                    Background="#88D2691E"
-                    Foreground="White"
-                    BorderThickness="0"
-                    FontSize="14"
-                    Cursor="Hand"
-                    Click="OnClaudeUsageButtonClick"
-                    ToolTip="Claude使用量">
-                <Button.Style>
-                    <Style TargetType="Button">
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
-                                            CornerRadius="14">
-                                        <ContentPresenter HorizontalAlignment="Center"
-                                                         VerticalAlignment="Center"/>
-                                    </Border>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CCCD853F"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
-
-            <!-- 設定ボタン -->
-            <Button Content="⚙"
-                    Width="28"
-                    Height="28"
-                    Margin="0,0,0,0"
-                    Background="#88708090"
+                    Background="#88607D8B"
                     Foreground="White"
                     BorderThickness="0"
                     FontSize="14"
@@ -368,7 +198,7 @@
                         </Setter>
                         <Style.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#CC778899"/>
+                                <Setter Property="Background" Value="#CC78909C"/>
                             </Trigger>
                         </Style.Triggers>
                     </Style>
@@ -378,23 +208,20 @@
 
         <!-- キャラクター表示エリア（ドラッグ可能） -->
         <Border x:Name="CharacterBorder"
-                Width="340" Height="340"
                 CornerRadius="12"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
                 Background="Transparent"
-                Padding="10"
-                Margin="0,40,10,10"
+                Padding="5"
+                Margin="0,40,5,5"
                 MouseLeftButtonDown="Window_MouseLeftButtonDown"
                 Cursor="SizeAll">
             <Grid>
                 <!-- アバター画像またはプレースホルダー -->
                 <Image x:Name="AvatarImage"
-                       Width="320"
-                       Height="320"
-                       Stretch="None"
+                       Stretch="Uniform"
                        Visibility="Collapsed"
-                       HorizontalAlignment="Right"
-                       VerticalAlignment="Bottom"/>
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
 
                 <!-- プレースホルダー（アバターがない場合） -->
                 <Viewbox x:Name="PlaceholderViewbox" Stretch="Uniform">

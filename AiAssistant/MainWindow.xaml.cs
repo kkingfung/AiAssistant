@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -38,6 +39,12 @@ namespace AiAssistant
         private ICurrencyService? _currencyService;
         private ClaudeUsageService? _claudeUsageService;
         private IChatHistoryService? _chatHistoryService;
+        private ITranslationService? _translationService;
+        private IGitHubService? _gitHubService;
+
+        // 翻訳用ホットキー
+        private const int TRANSLATE_HOTKEY_ID = 0xB002;
+        private const uint MOD_SHIFT = 0x0004;
 
         // 現在表示中のメール一覧（インタラクション用）
         private IReadOnlyList<EmailInfo>? _currentEmails;
@@ -79,6 +86,9 @@ namespace AiAssistant
                 ShowTransientMessage(message, 3000);
                 Console.WriteLine($"[Init] メッセージ: {message}");
                 System.Diagnostics.Debug.WriteLine($"AIサービス初期化完了: {serviceType}");
+
+                // 翻訳サービスを初期化
+                InitializeTranslationService();
             }
             catch (Exception ex)
             {
@@ -89,11 +99,17 @@ namespace AiAssistant
                 _viewModel = new AssistantViewModel(new MockAiService());
                 DataContext = _viewModel;
                 ShowTransientMessage("AIサービスの初期化に失敗しました。MockAiServiceを使用します。", 3000);
+
+                // 翻訳サービスを初期化（Mock使用時も）
+                InitializeTranslationService();
             }
         }
 
         private async void OnLoaded(object? sender, RoutedEventArgs e)
         {
+            // 保存されたウィンドウサイズを適用
+            ApplySavedWindowSize();
+
             // ウィンドウを画面右下に配置
             var workArea = SystemParameters.WorkArea;
             Left = workArea.Right - Width - 10;
@@ -113,6 +129,38 @@ namespace AiAssistant
 
             // クイックアクションサービスを初期化
             InitializeQuickActionServices();
+        }
+
+        /// <summary>
+        /// 保存されたウィンドウサイズを適用します
+        /// </summary>
+        private void ApplySavedWindowSize()
+        {
+            var settings = AppSettings.Instance.Assistant;
+            var sizeKey = settings.WindowSize;
+
+            // サイズプリセットを取得 (width, height, charSize, chatWidth, chatHeight)
+            var (width, height, charSize, chatWidth, chatHeight) = sizeKey switch
+            {
+                "Small" => (180.0, 200.0, 160.0, 170.0, 190.0),
+                "Medium" => (240.0, 267.0, 220.0, 230.0, 257.0),
+                "Large" => (360.0, 400.0, 320.0, 340.0, 380.0),
+                _ => (360.0, 400.0, 320.0, 340.0, 380.0)
+            };
+
+            // ウィンドウサイズを適用
+            this.Width = width;
+            this.Height = height;
+
+            // キャラクター表示エリアをリサイズ
+            CharacterBorder.Width = charSize;
+            CharacterBorder.Height = charSize;
+
+            // チャットボックスをリサイズ
+            ChatBalloon.Width = chatWidth;
+            ChatBalloon.Height = chatHeight;
+
+            Console.WriteLine($"[WindowSize] 保存されたサイズを適用: {sizeKey} ({width}×{height})");
         }
 
         /// <summary>
@@ -142,6 +190,20 @@ namespace AiAssistant
             // Claude使用量サービス
             _claudeUsageService = new ClaudeUsageService();
 
+            // GitHubサービス
+            try
+            {
+                if (AppSettings.Instance.GitHub.IsConfigured)
+                {
+                    _gitHubService = new GitHubService();
+                    Console.WriteLine("[GitHub] GitHubサービスを初期化しました");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GitHub] 初期化エラー: {ex.Message}");
+            }
+
             // 会話履歴サービス
             _chatHistoryService = new ChatHistoryService();
 
@@ -149,6 +211,18 @@ namespace AiAssistant
             RestoreChatHistory();
 
             Console.WriteLine("[QuickAction] クイックアクションサービスを初期化しました");
+        }
+
+        /// <summary>
+        /// 翻訳サービスを初期化します（AIサービス初期化後に呼び出す）
+        /// </summary>
+        private void InitializeTranslationService()
+        {
+            if (_viewModel?.AiService != null)
+            {
+                _translationService = new TranslationService(_viewModel.AiService);
+                Console.WriteLine("[Translation] 翻訳サービスを初期化しました");
+            }
         }
 
         /// <summary>
@@ -296,6 +370,9 @@ namespace AiAssistant
             // 註冊全域熱鍵 Ctrl+Alt+T 用來切換 click-through
             var vk = (uint)KeyInterop.VirtualKeyFromKey(Key.T);
             _ = RegisterHotKey(hwnd, HOTKEY_ID, MOD_CONTROL | MOD_ALT, vk);
+
+            // 翻訳用ホットキー Ctrl+Shift+T を登録
+            _ = RegisterHotKey(hwnd, TRANSLATE_HOTKEY_ID, MOD_CONTROL | MOD_SHIFT, vk);
         }
 
         private void OnClosed(object? sender, EventArgs e)
@@ -305,6 +382,7 @@ namespace AiAssistant
 
             var helper = new WindowInteropHelper(this);
             UnregisterHotKey(helper.Handle, HOTKEY_ID);
+            UnregisterHotKey(helper.Handle, TRANSLATE_HOTKEY_ID);
 
             // アニメーションコントローラーをクリーンアップ
             _animationController?.Dispose();
@@ -334,12 +412,6 @@ namespace AiAssistant
         private void OnPetSelectorButtonClick(object sender, RoutedEventArgs e)
         {
             TogglePetSelector();
-        }
-
-        // 設定ボタン
-        private void OnSettingsButtonClick(object sender, RoutedEventArgs e)
-        {
-            OpenSettingsWindow();
         }
 
         /// <summary>
@@ -553,10 +625,19 @@ namespace AiAssistant
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
+            if (msg == WM_HOTKEY)
             {
-                ToggleClickThrough();
-                handled = true;
+                var hotkeyId = wParam.ToInt32();
+                if (hotkeyId == HOTKEY_ID)
+                {
+                    ToggleClickThrough();
+                    handled = true;
+                }
+                else if (hotkeyId == TRANSLATE_HOTKEY_ID)
+                {
+                    _ = TranslateClipboardTextAsync();
+                    handled = true;
+                }
             }
             return IntPtr.Zero;
         }
@@ -715,20 +796,48 @@ namespace AiAssistant
         // チャットメッセージをUIに追加
         private TextBlock AddChatMessage(string message, bool isUser)
         {
-            var settings = AppSettings.Instance.Assistant;
-            var isDark = settings.IsDarkTheme;
+            var assistantSettings = AppSettings.Instance.Assistant;
+            var isDark = assistantSettings.IsDarkTheme;
+            var bubbleStyle = AppSettings.Instance.ChatBubble.GetCurrentStyle();
+
+            // スタイルから色を取得
+            var backgroundColor = isUser
+                ? ChatBubbleStyle.ParseColor(bubbleStyle.UserBubbleColor)
+                : ChatBubbleStyle.ParseColor(isDark ? bubbleStyle.AiBubbleColorDark : bubbleStyle.AiBubbleColorLight);
+
+            var textColor = isUser
+                ? ChatBubbleStyle.ParseColor(bubbleStyle.UserTextColor)
+                : ChatBubbleStyle.ParseColor(isDark ? bubbleStyle.AiTextColorDark : bubbleStyle.AiTextColorLight);
 
             var messageContainer = new Border
             {
-                Margin = new Thickness(0, 0, 0, 8),
-                Padding = new Thickness(10, 6, 10, 6),
-                CornerRadius = new CornerRadius(8),
-                Background = isUser
-                    ? new SolidColorBrush(Color.FromRgb(30, 144, 255))
-                    : new SolidColorBrush(isDark ? Color.FromRgb(50, 50, 50) : Color.FromRgb(240, 240, 240)),
+                Margin = new Thickness(0, 0, 0, bubbleStyle.Margin),
+                Padding = new Thickness(bubbleStyle.Padding, bubbleStyle.Padding * 0.6, bubbleStyle.Padding, bubbleStyle.Padding * 0.6),
+                CornerRadius = new CornerRadius(bubbleStyle.CornerRadius),
+                Background = new SolidColorBrush(backgroundColor),
                 HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left,
-                MaxWidth = 280
+                MaxWidth = 280,
+                Opacity = bubbleStyle.Opacity
             };
+
+            // 境界線スタイルを適用
+            if (bubbleStyle.BorderThickness > 0)
+            {
+                messageContainer.BorderThickness = new Thickness(bubbleStyle.BorderThickness);
+                messageContainer.BorderBrush = ChatBubbleStyle.ToBrush(bubbleStyle.BorderColor);
+            }
+
+            // シャドウを適用
+            if (bubbleStyle.EnableShadow)
+            {
+                messageContainer.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = ChatBubbleStyle.ParseColor(bubbleStyle.ShadowColor),
+                    BlurRadius = bubbleStyle.ShadowBlurRadius,
+                    ShadowDepth = 2,
+                    Opacity = 0.5
+                };
+            }
 
             // Markdownサポートを使用してTextBlockを作成
             var textBlock = isUser
@@ -736,10 +845,11 @@ namespace AiAssistant
                 {
                     Text = message,
                     TextWrapping = TextWrapping.Wrap,
-                    Foreground = Brushes.White,
-                    FontSize = 13
+                    Foreground = new SolidColorBrush(textColor),
+                    FontSize = bubbleStyle.FontSize,
+                    FontFamily = new FontFamily(bubbleStyle.FontFamily)
                 }
-                : MarkdownTextBlockHelper.CreateFormattedTextBlock(message, isUser);
+                : MarkdownTextBlockHelper.CreateFormattedTextBlock(message, isUser, bubbleStyle);
 
             messageContainer.Child = textBlock;
             ChatMessagesPanel.Children.Add(messageContainer);
@@ -792,6 +902,1106 @@ namespace AiAssistant
                 TransientBorder.Visibility = Visibility.Collapsed;
             }
         }
+
+        #region Style Selector Handlers
+
+        /// <summary>
+        /// スタイル選択ボタンクリック - コンテキストメニューを表示
+        /// </summary>
+        private void OnStyleSelectorButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+            var currentPreset = AppSettings.Instance.ChatBubble.Preset;
+
+            // 各プリセットをメニューに追加
+            foreach (ChatBubblePreset preset in Enum.GetValues(typeof(ChatBubblePreset)))
+            {
+                if (preset == ChatBubblePreset.Custom) continue; // カスタムは別途処理
+
+                var presetName = preset.ToString();
+                var emoji = GetPresetEmoji(preset);
+                var menuItem = new MenuItem
+                {
+                    Header = $"{emoji} {GetPresetDisplayName(preset)}",
+                    IsChecked = currentPreset == presetName,
+                    Tag = presetName
+                };
+                menuItem.Click += OnStylePresetSelected;
+                contextMenu.Items.Add(menuItem);
+            }
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// プリセットの絵文字を取得します
+        /// </summary>
+        private static string GetPresetEmoji(ChatBubblePreset preset)
+        {
+            return preset switch
+            {
+                ChatBubblePreset.Modern => "💬",
+                ChatBubblePreset.Minimal => "⬜",
+                ChatBubblePreset.Glassmorphism => "🔮",
+                ChatBubblePreset.Retro => "📺",
+                ChatBubblePreset.PixelArt => "🎮",
+                ChatBubblePreset.Neon => "💡",
+                ChatBubblePreset.Pastel => "🌸",
+                ChatBubblePreset.Dark => "🌙",
+                _ => "🎨"
+            };
+        }
+
+        /// <summary>
+        /// プリセットの表示名を取得します
+        /// </summary>
+        private static string GetPresetDisplayName(ChatBubblePreset preset)
+        {
+            return preset switch
+            {
+                ChatBubblePreset.Modern => "Modern (モダン)",
+                ChatBubblePreset.Minimal => "Minimal (ミニマル)",
+                ChatBubblePreset.Glassmorphism => "Glass (ガラス風)",
+                ChatBubblePreset.Retro => "Retro (レトロ)",
+                ChatBubblePreset.PixelArt => "Pixel Art (ピクセル)",
+                ChatBubblePreset.Neon => "Neon (ネオン)",
+                ChatBubblePreset.Pastel => "Pastel (パステル)",
+                ChatBubblePreset.Dark => "Dark (ダーク)",
+                _ => preset.ToString()
+            };
+        }
+
+        /// <summary>
+        /// スタイルプリセットが選択されたときの処理
+        /// </summary>
+        private void OnStylePresetSelected(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem || menuItem.Tag is not string presetName) return;
+
+            try
+            {
+                // 設定を更新
+                AppSettings.Instance.ChatBubble.Preset = presetName;
+                AppSettings.Instance.Save();
+
+                // 通知
+                var emoji = Enum.TryParse<ChatBubblePreset>(presetName, out var preset) ? GetPresetEmoji(preset) : "🎨";
+                ShowTransientMessage($"{emoji} スタイルを {presetName} に変更しました", 2000);
+
+                Console.WriteLine($"[StyleSelector] スタイルを変更: {presetName}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[StyleSelector] エラー: {ex.Message}");
+                ShowTransientMessage("スタイルの変更に失敗しました", 2000);
+            }
+        }
+
+        #endregion
+
+        #region GitHub Handlers
+
+        /// <summary>
+        /// GitHubボタンクリック - コンテキストメニューを表示
+        /// </summary>
+        private void OnGitHubButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            var notificationsItem = new MenuItem { Header = "🔔 通知を表示" };
+            notificationsItem.Click += async (s, args) => await ShowGitHubNotificationsAsync();
+
+            var prsItem = new MenuItem { Header = "📝 レビュー待ちPR" };
+            prsItem.Click += async (s, args) => await ShowPullRequestsAwaitingReviewAsync();
+
+            var markAllReadItem = new MenuItem { Header = "✅ すべて既読にする" };
+            markAllReadItem.Click += async (s, args) => await MarkAllGitHubNotificationsReadAsync();
+
+            contextMenu.Items.Add(notificationsItem);
+            contextMenu.Items.Add(prsItem);
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(markAllReadItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// GitHub通知を表示します
+        /// </summary>
+        private async Task ShowGitHubNotificationsAsync()
+        {
+            if (_gitHubService == null)
+            {
+                ShowTransientMessage("GitHubが設定されていません", 2000);
+                return;
+            }
+
+            try
+            {
+                ShowTransientMessage("GitHub通知を取得中...", 30000);
+
+                var notifications = await _gitHubService.GetNotificationsAsync();
+
+                // チャットを開く
+                if (!_isChatOpen)
+                {
+                    _isChatOpen = true;
+                    ChatBalloon.Visibility = Visibility.Visible;
+                }
+
+                AddSystemMessage("🐙 GitHub通知");
+
+                if (notifications.Count == 0)
+                {
+                    AddSystemMessage("未読の通知はありません");
+                }
+                else
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"**{notifications.Count}件の未読通知**\n");
+
+                    foreach (var n in notifications.Take(10))
+                    {
+                        var icon = n.Type switch
+                        {
+                            "PullRequest" => "📝",
+                            "Issue" => "🔵",
+                            "Release" => "📦",
+                            _ => "🔔"
+                        };
+
+                        sb.AppendLine($"{icon} **{n.Repository}**");
+                        sb.AppendLine($"  {n.Title}");
+                        sb.AppendLine($"  _{n.Reason}_ - {n.UpdatedAt:MM/dd HH:mm}");
+                        sb.AppendLine();
+                    }
+
+                    if (notifications.Count > 10)
+                    {
+                        sb.AppendLine($"... 他 {notifications.Count - 10} 件");
+                    }
+
+                    AddChatMessage(sb.ToString(), false);
+                }
+
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GitHub] エラー: {ex.Message}");
+                ShowTransientMessage("GitHub通知の取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// レビュー待ちPRを表示します
+        /// </summary>
+        private async Task ShowPullRequestsAwaitingReviewAsync()
+        {
+            if (_gitHubService == null)
+            {
+                ShowTransientMessage("GitHubが設定されていません", 2000);
+                return;
+            }
+
+            try
+            {
+                ShowTransientMessage("レビュー待ちPRを取得中...", 30000);
+
+                var prs = await _gitHubService.GetPullRequestsAwaitingReviewAsync();
+
+                // チャットを開く
+                if (!_isChatOpen)
+                {
+                    _isChatOpen = true;
+                    ChatBalloon.Visibility = Visibility.Visible;
+                }
+
+                AddSystemMessage("📝 レビュー待ちPR");
+
+                if (prs.Count == 0)
+                {
+                    AddSystemMessage("レビュー待ちのPRはありません");
+                }
+                else
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"**{prs.Count}件のレビュー待ちPR**\n");
+
+                    foreach (var pr in prs.Take(10))
+                    {
+                        var draftIcon = pr.IsDraft ? "📝" : "✨";
+                        sb.AppendLine($"{draftIcon} **#{pr.Number}** {pr.Title}");
+                        sb.AppendLine($"  {pr.Repository} by @{pr.Author}");
+                        sb.AppendLine($"  📅 {pr.CreatedAt:MM/dd} | 💬 {pr.Comments}");
+                        sb.AppendLine();
+                    }
+
+                    AddChatMessage(sb.ToString(), false);
+                }
+
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GitHub] エラー: {ex.Message}");
+                ShowTransientMessage("レビュー待ちPRの取得に失敗しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// すべてのGitHub通知を既読にします
+        /// </summary>
+        private async Task MarkAllGitHubNotificationsReadAsync()
+        {
+            if (_gitHubService == null)
+            {
+                ShowTransientMessage("GitHubが設定されていません", 2000);
+                return;
+            }
+
+            try
+            {
+                await _gitHubService.MarkAllNotificationsAsReadAsync();
+                ShowTransientMessage("すべての通知を既読にしました", 2000);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GitHub] エラー: {ex.Message}");
+                ShowTransientMessage("既読化に失敗しました", 3000);
+            }
+        }
+
+        #endregion
+
+        #region Status Handlers (Discord/Slack)
+
+        private DiscordStatusService? _discordService;
+        private SlackStatusService? _slackService;
+
+        /// <summary>
+        /// ステータスボタンクリック - コンテキストメニューを表示
+        /// </summary>
+        private void OnStatusButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            // ステータス表示
+            var viewStatusItem = new MenuItem { Header = "👀 現在のステータスを表示" };
+            viewStatusItem.Click += async (s, args) => await ShowCurrentStatusAsync();
+            contextMenu.Items.Add(viewStatusItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // ステータス設定メニュー
+            var setStatusMenu = new MenuItem { Header = "📝 ステータスを設定" };
+
+            var workingItem = new MenuItem { Header = "💻 作業中" };
+            workingItem.Click += async (s, args) => await SetStatusAsync("作業中", ":computer:");
+
+            var meetingItem = new MenuItem { Header = "🗓️ 会議中" };
+            meetingItem.Click += async (s, args) => await SetStatusAsync("会議中", ":calendar:");
+
+            var breakItem = new MenuItem { Header = "☕ 休憩中" };
+            breakItem.Click += async (s, args) => await SetStatusAsync("休憩中", ":coffee:");
+
+            var focusItem = new MenuItem { Header = "🎯 集中モード" };
+            focusItem.Click += async (s, args) => await SetStatusAsync("集中モード - 通知オフ", ":dart:");
+
+            var awayItem = new MenuItem { Header = "🚶 離席中" };
+            awayItem.Click += async (s, args) => await SetStatusAsync("離席中", ":walking:");
+
+            setStatusMenu.Items.Add(workingItem);
+            setStatusMenu.Items.Add(meetingItem);
+            setStatusMenu.Items.Add(breakItem);
+            setStatusMenu.Items.Add(focusItem);
+            setStatusMenu.Items.Add(awayItem);
+            contextMenu.Items.Add(setStatusMenu);
+
+            // カスタムステータス
+            var customStatusItem = new MenuItem { Header = "✏️ カスタムステータス..." };
+            customStatusItem.Click += OnCustomStatusClick;
+            contextMenu.Items.Add(customStatusItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // ステータスクリア
+            var clearStatusItem = new MenuItem { Header = "🗑️ ステータスをクリア" };
+            clearStatusItem.Click += async (s, args) => await ClearStatusAsync();
+            contextMenu.Items.Add(clearStatusItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // プレゼンス設定
+            var presenceMenu = new MenuItem { Header = "🔵 プレゼンス" };
+
+            var onlineItem = new MenuItem { Header = "🟢 オンライン" };
+            onlineItem.Click += async (s, args) => await SetPresenceAsync(OnlineStatus.Online);
+
+            var idleItem = new MenuItem { Header = "🟡 退席中" };
+            idleItem.Click += async (s, args) => await SetPresenceAsync(OnlineStatus.Idle);
+
+            var dndItem = new MenuItem { Header = "🔴 取り込み中" };
+            dndItem.Click += async (s, args) => await SetPresenceAsync(OnlineStatus.DoNotDisturb);
+
+            var invisibleItem = new MenuItem { Header = "⚫ オフライン表示" };
+            invisibleItem.Click += async (s, args) => await SetPresenceAsync(OnlineStatus.Invisible);
+
+            presenceMenu.Items.Add(onlineItem);
+            presenceMenu.Items.Add(idleItem);
+            presenceMenu.Items.Add(dndItem);
+            presenceMenu.Items.Add(invisibleItem);
+            contextMenu.Items.Add(presenceMenu);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// 現在のステータスを表示します
+        /// </summary>
+        private async Task ShowCurrentStatusAsync()
+        {
+            var statuses = new List<string>();
+
+            // Discordステータス
+            if (AppSettings.Instance.Discord.IsConfigured)
+            {
+                _discordService ??= new DiscordStatusService();
+                var discordStatus = await _discordService.GetCurrentStatusAsync();
+                if (discordStatus != null && !string.IsNullOrEmpty(discordStatus.StatusText))
+                {
+                    statuses.Add($"**Discord**: {discordStatus.Emoji} {discordStatus.StatusText}");
+                }
+            }
+
+            // Slackステータス
+            if (AppSettings.Instance.Slack.IsConfigured)
+            {
+                _slackService ??= new SlackStatusService();
+                var slackStatus = await _slackService.GetCurrentStatusAsync();
+                if (slackStatus != null && !string.IsNullOrEmpty(slackStatus.StatusText))
+                {
+                    var expireText = slackStatus.ExpiresAt.HasValue
+                        ? $" (期限: {slackStatus.ExpiresAt:HH:mm})"
+                        : "";
+                    statuses.Add($"**Slack**: {slackStatus.Emoji} {slackStatus.StatusText}{expireText}");
+                }
+            }
+
+            if (statuses.Count == 0)
+            {
+                ShowTransientMessage("ステータスが設定されていないか、\nサービスが未設定です", 3000);
+            }
+            else
+            {
+                // チャットを開く
+                if (!_isChatOpen)
+                {
+                    _isChatOpen = true;
+                    ChatBalloon.Visibility = Visibility.Visible;
+                }
+
+                AddSystemMessage("📡 現在のステータス");
+                AddChatMessage(string.Join("\n", statuses), false);
+            }
+        }
+
+        /// <summary>
+        /// ステータスを設定します
+        /// </summary>
+        private async Task SetStatusAsync(string statusText, string emoji)
+        {
+            var results = new List<string>();
+
+            // Discord
+            if (AppSettings.Instance.Discord.IsConfigured)
+            {
+                _discordService ??= new DiscordStatusService();
+                var success = await _discordService.SetStatusAsync(statusText, emoji);
+                results.Add($"Discord: {(success ? "✅" : "❌")}");
+            }
+
+            // Slack
+            if (AppSettings.Instance.Slack.IsConfigured)
+            {
+                _slackService ??= new SlackStatusService();
+                var success = await _slackService.SetStatusAsync(statusText, emoji);
+                results.Add($"Slack: {(success ? "✅" : "❌")}");
+            }
+
+            if (results.Count > 0)
+            {
+                ShowTransientMessage($"ステータス設定\n{string.Join("\n", results)}", 2000);
+            }
+            else
+            {
+                ShowTransientMessage("Discord/Slackが設定されていません", 2000);
+            }
+        }
+
+        /// <summary>
+        /// カスタムステータス入力ダイアログを表示します
+        /// </summary>
+        private void OnCustomStatusClick(object sender, RoutedEventArgs e)
+        {
+            // チャットを開いてカスタムステータスの入力を促す
+            if (!_isChatOpen)
+            {
+                _isChatOpen = true;
+                ChatBalloon.Visibility = Visibility.Visible;
+            }
+
+            AddSystemMessage("📝 カスタムステータス");
+            AddChatMessage("カスタムステータスを入力してください。\n例: `status: 集中作業中`\n\nコマンド形式:\n- `status: テキスト` - ステータスを設定\n- `status clear` - ステータスをクリア", false);
+        }
+
+        /// <summary>
+        /// ステータスをクリアします
+        /// </summary>
+        private async Task ClearStatusAsync()
+        {
+            var results = new List<string>();
+
+            // Discord
+            if (AppSettings.Instance.Discord.IsConfigured)
+            {
+                _discordService ??= new DiscordStatusService();
+                var success = await _discordService.ClearStatusAsync();
+                results.Add($"Discord: {(success ? "✅ クリア" : "❌")}");
+            }
+
+            // Slack
+            if (AppSettings.Instance.Slack.IsConfigured)
+            {
+                _slackService ??= new SlackStatusService();
+                var success = await _slackService.ClearStatusAsync();
+                results.Add($"Slack: {(success ? "✅ クリア" : "❌")}");
+            }
+
+            if (results.Count > 0)
+            {
+                ShowTransientMessage($"ステータスクリア\n{string.Join("\n", results)}", 2000);
+            }
+            else
+            {
+                ShowTransientMessage("Discord/Slackが設定されていません", 2000);
+            }
+        }
+
+        /// <summary>
+        /// プレゼンスを設定します
+        /// </summary>
+        private async Task SetPresenceAsync(OnlineStatus presence)
+        {
+            var results = new List<string>();
+
+            // Discord (Webhookでは制限あり)
+            if (AppSettings.Instance.Discord.IsConfigured)
+            {
+                _discordService ??= new DiscordStatusService();
+                var success = await _discordService.SetPresenceAsync(presence);
+                results.Add($"Discord: {(success ? "✅" : "⚠️ Webhook制限")}");
+            }
+
+            // Slack
+            if (AppSettings.Instance.Slack.IsConfigured)
+            {
+                _slackService ??= new SlackStatusService();
+                var success = await _slackService.SetPresenceAsync(presence);
+                results.Add($"Slack: {(success ? "✅" : "❌")}");
+            }
+
+            var presenceText = presence switch
+            {
+                OnlineStatus.Online => "オンライン",
+                OnlineStatus.Idle => "退席中",
+                OnlineStatus.DoNotDisturb => "取り込み中",
+                OnlineStatus.Invisible => "オフライン表示",
+                _ => presence.ToString()
+            };
+
+            if (results.Count > 0)
+            {
+                ShowTransientMessage($"プレゼンス: {presenceText}\n{string.Join("\n", results)}", 2000);
+            }
+            else
+            {
+                ShowTransientMessage("Discord/Slackが設定されていません", 2000);
+            }
+        }
+
+        #endregion
+
+        #region Translation Handlers
+
+        /// <summary>
+        /// 翻訳ボタンクリック - コンテキストメニューを表示
+        /// </summary>
+        private void OnTranslateButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            var clipboardItem = new MenuItem { Header = "📋 クリップボードを翻訳 (Ctrl+Shift+T)" };
+            clipboardItem.Click += async (s, args) => await TranslateClipboardTextAsync();
+
+            var toJapaneseItem = new MenuItem { Header = "🇯🇵 日本語に翻訳" };
+            toJapaneseItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("Japanese");
+
+            var toEnglishItem = new MenuItem { Header = "🇺🇸 英語に翻訳" };
+            toEnglishItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("English");
+
+            var toKoreanItem = new MenuItem { Header = "🇰🇷 韓国語に翻訳" };
+            toKoreanItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("Korean");
+
+            var toChineseItem = new MenuItem { Header = "🇨🇳 中国語に翻訳" };
+            toChineseItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("Chinese");
+
+            contextMenu.Items.Add(clipboardItem);
+            contextMenu.Items.Add(new Separator());
+            contextMenu.Items.Add(toJapaneseItem);
+            contextMenu.Items.Add(toEnglishItem);
+            contextMenu.Items.Add(toKoreanItem);
+            contextMenu.Items.Add(toChineseItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// クリップボードのテキストを自動翻訳します（ホットキー用）
+        /// </summary>
+        private async Task TranslateClipboardTextAsync()
+        {
+            if (_translationService == null)
+            {
+                ShowTransientMessage("翻訳サービスが初期化されていません", 2000);
+                return;
+            }
+
+            try
+            {
+                // クリップボードからテキストを取得
+                var clipboardText = GetClipboardText();
+                if (string.IsNullOrWhiteSpace(clipboardText))
+                {
+                    ShowTransientMessage("クリップボードにテキストがありません", 2000);
+                    return;
+                }
+
+                ShowTransientMessage("翻訳中...", 30000);
+
+                // 自動翻訳を実行
+                var result = await _translationService.AutoTranslateAsync(clipboardText);
+
+                if (result.IsSuccess)
+                {
+                    // 翻訳結果を表示
+                    ShowTranslationResult(result);
+
+                    // 設定に応じてクリップボードにコピー
+                    var settings = AppSettings.Instance.Translation;
+                    if (settings.CopyToClipboard)
+                    {
+                        SetClipboardText(result.TranslatedText);
+                    }
+                }
+                else
+                {
+                    ShowTransientMessage(result.ErrorMessage ?? "翻訳に失敗しました", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Translation] エラー: {ex.Message}");
+                ShowTransientMessage("翻訳中にエラーが発生しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// クリップボードのテキストを指定言語に翻訳します
+        /// </summary>
+        private async Task TranslateClipboardToLanguageAsync(string targetLanguage)
+        {
+            if (_translationService == null)
+            {
+                ShowTransientMessage("翻訳サービスが初期化されていません", 2000);
+                return;
+            }
+
+            try
+            {
+                var clipboardText = GetClipboardText();
+                if (string.IsNullOrWhiteSpace(clipboardText))
+                {
+                    ShowTransientMessage("クリップボードにテキストがありません", 2000);
+                    return;
+                }
+
+                ShowTransientMessage($"{targetLanguage}に翻訳中...", 30000);
+
+                var result = await _translationService.TranslateAsync(clipboardText, targetLanguage);
+
+                if (result.IsSuccess)
+                {
+                    result.TargetLanguage = targetLanguage;
+                    ShowTranslationResult(result);
+
+                    var settings = AppSettings.Instance.Translation;
+                    if (settings.CopyToClipboard)
+                    {
+                        SetClipboardText(result.TranslatedText);
+                    }
+                }
+                else
+                {
+                    ShowTransientMessage(result.ErrorMessage ?? "翻訳に失敗しました", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Translation] エラー: {ex.Message}");
+                ShowTransientMessage("翻訳中にエラーが発生しました", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 翻訳結果をチャットに表示します
+        /// </summary>
+        private void ShowTranslationResult(TranslationResult result)
+        {
+            // チャットを開く
+            if (!_isChatOpen)
+            {
+                _isChatOpen = true;
+                ChatBalloon.Visibility = Visibility.Visible;
+
+                if (_isClickThrough)
+                {
+                    _isClickThrough = false;
+                    ClickThroughHelper.SetClickThrough(this, false);
+                }
+            }
+
+            // 結果を構築
+            var settings = AppSettings.Instance.Assistant;
+            var isDark = settings.IsDarkTheme;
+
+            // ヘッダー
+            var langInfo = !string.IsNullOrEmpty(result.DetectedLanguage) && !string.IsNullOrEmpty(result.TargetLanguage)
+                ? $"{result.DetectedLanguage} → {result.TargetLanguage}"
+                : !string.IsNullOrEmpty(result.TargetLanguage)
+                    ? $"→ {result.TargetLanguage}"
+                    : "翻訳結果";
+
+            AddSystemMessage($"🌐 翻訳 ({langInfo})");
+
+            // 翻訳結果を表示
+            AddTranslationMessage(result.OriginalText, result.TranslatedText, isDark);
+
+            // クリップボードにコピーされた場合の通知
+            var translationSettings = AppSettings.Instance.Translation;
+            if (translationSettings.CopyToClipboard)
+            {
+                ShowTransientMessage("翻訳結果をクリップボードにコピーしました", 2000);
+            }
+            else
+            {
+                TransientBorder.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>
+        /// 翻訳メッセージをチャットに追加します
+        /// </summary>
+        private void AddTranslationMessage(string original, string translated, bool isDark)
+        {
+            var container = new Border
+            {
+                Margin = new Thickness(0, 0, 0, 8),
+                Padding = new Thickness(10, 8, 10, 8),
+                CornerRadius = new CornerRadius(8),
+                Background = new SolidColorBrush(isDark
+                    ? Color.FromRgb(25, 50, 75)
+                    : Color.FromRgb(230, 245, 255)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(33, 150, 243)),
+                BorderThickness = new Thickness(1),
+                MaxWidth = 310
+            };
+
+            var panel = new StackPanel();
+
+            // 元のテキスト（短縮表示）
+            var originalLabel = new TextBlock
+            {
+                FontSize = 10,
+                Foreground = new SolidColorBrush(isDark
+                    ? Color.FromRgb(180, 180, 180)
+                    : Color.FromRgb(100, 100, 100)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 6),
+                Text = TruncateText(original, 100)
+            };
+            panel.Children.Add(originalLabel);
+
+            // セパレータ
+            var separator = new Border
+            {
+                Height = 1,
+                Background = new SolidColorBrush(Color.FromRgb(33, 150, 243)),
+                Opacity = 0.3,
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            panel.Children.Add(separator);
+
+            // 翻訳結果
+            var translatedLabel = new TextBlock
+            {
+                FontSize = 13,
+                FontWeight = FontWeights.Medium,
+                Foreground = new SolidColorBrush(isDark
+                    ? Color.FromRgb(220, 240, 255)
+                    : Color.FromRgb(20, 60, 100)),
+                TextWrapping = TextWrapping.Wrap,
+                Text = translated
+            };
+            panel.Children.Add(translatedLabel);
+
+            // コピーボタン
+            var copyButton = new Button
+            {
+                Content = "📋 コピー",
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 8, 0, 0),
+                Background = new SolidColorBrush(Color.FromRgb(33, 150, 243)),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                Cursor = Cursors.Hand,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Tag = translated
+            };
+            copyButton.Click += OnCopyTranslationClick;
+            panel.Children.Add(copyButton);
+
+            container.Child = panel;
+            ChatMessagesPanel.Children.Add(container);
+            ScrollChatToBottom();
+        }
+
+        /// <summary>
+        /// 翻訳結果コピーボタンクリック
+        /// </summary>
+        private void OnCopyTranslationClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string text)
+            {
+                SetClipboardText(text);
+                ShowTransientMessage("コピーしました", 1500);
+            }
+        }
+
+        /// <summary>
+        /// クリップボードからテキストを取得します
+        /// </summary>
+        private static string? GetClipboardText()
+        {
+            try
+            {
+                if (System.Windows.Clipboard.ContainsText())
+                {
+                    return System.Windows.Clipboard.GetText();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Clipboard] 取得エラー: {ex.Message}");
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// クリップボードにテキストを設定します
+        /// </summary>
+        private static void SetClipboardText(string text)
+        {
+            try
+            {
+                System.Windows.Clipboard.SetText(text);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Clipboard] 設定エラー: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region Consolidated Menu Handlers
+
+        /// <summary>
+        /// クイックアクションメニュー（情報系）を表示
+        /// </summary>
+        private void OnQuickActionsButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            // カレンダー
+            var calendarMenu = new MenuItem { Header = "📅 カレンダー" };
+            var calWeekItem = new MenuItem { Header = "今週の予定" };
+            calWeekItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.ThisWeek);
+            var calNextWeekItem = new MenuItem { Header = "来週の予定" };
+            calNextWeekItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.NextWeek);
+            var calMonthItem = new MenuItem { Header = "今月の予定" };
+            calMonthItem.Click += async (s, args) => await ShowCalendarEventsAsync(CalendarPeriod.ThisMonth);
+            calendarMenu.Items.Add(calWeekItem);
+            calendarMenu.Items.Add(calNextWeekItem);
+            calendarMenu.Items.Add(calMonthItem);
+            contextMenu.Items.Add(calendarMenu);
+
+            // 天気
+            var weatherItem = new MenuItem { Header = "🌤 天気予報" };
+            weatherItem.Click += (s, args) => OnWeatherButtonClick(s, args);
+            contextMenu.Items.Add(weatherItem);
+
+            // ファンド
+            var fundItem = new MenuItem { Header = "💹 ファンド情報" };
+            fundItem.Click += (s, args) => OnFundButtonClick(s, args);
+            contextMenu.Items.Add(fundItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // Gmail
+            var gmailItem = new MenuItem { Header = "📧 Gmail" };
+            gmailItem.Click += (s, args) => OnGmailButtonClick(s, args);
+            contextMenu.Items.Add(gmailItem);
+
+            // 為替
+            var currencyItem = new MenuItem { Header = "💱 為替レート" };
+            currencyItem.Click += (s, args) => OnCurrencyButtonClick(s, args);
+            contextMenu.Items.Add(currencyItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// ツールメニュー（開発・連携系）を表示
+        /// </summary>
+        private void OnToolsButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            // GitHub
+            var githubMenu = new MenuItem { Header = "🐙 GitHub" };
+            var ghNotifyItem = new MenuItem { Header = "通知を表示" };
+            ghNotifyItem.Click += async (s, args) => await ShowGitHubNotificationsAsync();
+            var ghPrItem = new MenuItem { Header = "レビュー待ちPR" };
+            ghPrItem.Click += async (s, args) => await ShowPullRequestsAwaitingReviewAsync();
+            var ghReadAllItem = new MenuItem { Header = "すべて既読" };
+            ghReadAllItem.Click += async (s, args) => await MarkAllGitHubNotificationsReadAsync();
+            githubMenu.Items.Add(ghNotifyItem);
+            githubMenu.Items.Add(ghPrItem);
+            githubMenu.Items.Add(new Separator());
+            githubMenu.Items.Add(ghReadAllItem);
+            contextMenu.Items.Add(githubMenu);
+
+            // Discord/Slack ステータス
+            var statusMenu = new MenuItem { Header = "📡 ステータス (Discord/Slack)" };
+            var statusViewItem = new MenuItem { Header = "現在のステータス" };
+            statusViewItem.Click += async (s, args) => await ShowCurrentStatusAsync();
+            var statusWorkingItem = new MenuItem { Header = "💻 作業中に設定" };
+            statusWorkingItem.Click += async (s, args) => await SetStatusAsync("作業中", ":computer:");
+            var statusMeetingItem = new MenuItem { Header = "🗓️ 会議中に設定" };
+            statusMeetingItem.Click += async (s, args) => await SetStatusAsync("会議中", ":calendar:");
+            var statusBreakItem = new MenuItem { Header = "☕ 休憩中に設定" };
+            statusBreakItem.Click += async (s, args) => await SetStatusAsync("休憩中", ":coffee:");
+            var statusClearItem = new MenuItem { Header = "🗑️ クリア" };
+            statusClearItem.Click += async (s, args) => await ClearStatusAsync();
+            statusMenu.Items.Add(statusViewItem);
+            statusMenu.Items.Add(new Separator());
+            statusMenu.Items.Add(statusWorkingItem);
+            statusMenu.Items.Add(statusMeetingItem);
+            statusMenu.Items.Add(statusBreakItem);
+            statusMenu.Items.Add(new Separator());
+            statusMenu.Items.Add(statusClearItem);
+            contextMenu.Items.Add(statusMenu);
+
+            contextMenu.Items.Add(new Separator());
+
+            // 翻訳
+            var translateMenu = new MenuItem { Header = "🌐 翻訳" };
+            var transClipItem = new MenuItem { Header = "クリップボードを翻訳 (Ctrl+Shift+T)" };
+            transClipItem.Click += async (s, args) => await TranslateClipboardTextAsync();
+            var transJpItem = new MenuItem { Header = "🇯🇵 日本語に" };
+            transJpItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("Japanese");
+            var transEnItem = new MenuItem { Header = "🇺🇸 英語に" };
+            transEnItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("English");
+            var transKoItem = new MenuItem { Header = "🇰🇷 韓国語に" };
+            transKoItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("Korean");
+            var transZhItem = new MenuItem { Header = "🇨🇳 中国語に" };
+            transZhItem.Click += async (s, args) => await TranslateClipboardToLanguageAsync("Chinese");
+            translateMenu.Items.Add(transClipItem);
+            translateMenu.Items.Add(new Separator());
+            translateMenu.Items.Add(transJpItem);
+            translateMenu.Items.Add(transEnItem);
+            translateMenu.Items.Add(transKoItem);
+            translateMenu.Items.Add(transZhItem);
+            contextMenu.Items.Add(translateMenu);
+
+            // Claude使用量
+            var claudeItem = new MenuItem { Header = "📊 Claude使用量" };
+            claudeItem.Click += async (s, args) => await ShowClaudeUsageInfoAsync();
+            contextMenu.Items.Add(claudeItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// 設定メニューを表示
+        /// </summary>
+        private void OnSettingsButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            // ペット選択
+            var petMenu = new MenuItem { Header = "🐾 ペット変更" };
+            foreach (PetType petType in Enum.GetValues(typeof(PetType)))
+            {
+                var petItem = new MenuItem { Header = petType.ToString() };
+                var capturedPetType = petType;
+                petItem.Click += (s, args) => ChangePet(capturedPetType.ToString());
+                petMenu.Items.Add(petItem);
+            }
+            contextMenu.Items.Add(petMenu);
+
+            // チャットスタイル
+            var styleMenu = new MenuItem { Header = "🎨 チャットスタイル" };
+            var currentPreset = AppSettings.Instance.ChatBubble.Preset;
+            foreach (ChatBubblePreset preset in Enum.GetValues(typeof(ChatBubblePreset)))
+            {
+                if (preset == ChatBubblePreset.Custom) continue;
+                var emoji = GetPresetEmoji(preset);
+                var styleItem = new MenuItem
+                {
+                    Header = $"{emoji} {GetPresetDisplayName(preset)}",
+                    IsChecked = currentPreset == preset.ToString(),
+                    Tag = preset.ToString()
+                };
+                styleItem.Click += OnStylePresetSelected;
+                styleMenu.Items.Add(styleItem);
+            }
+            contextMenu.Items.Add(styleMenu);
+
+            // ウィンドウサイズ
+            var sizeMenu = new MenuItem { Header = "📐 ウィンドウサイズ" };
+            var currentSize = AppSettings.Instance.Assistant.WindowSize;
+            var sizes = new[] { ("Small", "小 (180×200)"), ("Medium", "中 (240×267)"), ("Large", "大 (360×400)") };
+            foreach (var (sizeKey, sizeLabel) in sizes)
+            {
+                var sizeItem = new MenuItem
+                {
+                    Header = sizeLabel,
+                    IsChecked = currentSize == sizeKey,
+                    Tag = sizeKey
+                };
+                sizeItem.Click += OnWindowSizeSelected;
+                sizeMenu.Items.Add(sizeItem);
+            }
+            contextMenu.Items.Add(sizeMenu);
+
+            contextMenu.Items.Add(new Separator());
+
+            // チャット履歴クリア
+            var clearChatItem = new MenuItem { Header = "🗑️ チャットをクリア" };
+            clearChatItem.Click += (s, args) =>
+            {
+                ChatMessagesPanel.Children.Clear();
+                ShowTransientMessage("チャットをクリアしました", 2000);
+            };
+            contextMenu.Items.Add(clearChatItem);
+
+            contextMenu.Items.Add(new Separator());
+
+            // 設定ウィンドウ
+            var settingsWindowItem = new MenuItem { Header = "🔧 設定ウィンドウ" };
+            settingsWindowItem.Click += (s, args) => OpenSettingsWindow();
+            contextMenu.Items.Add(settingsWindowItem);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// ウィンドウサイズが選択されたときの処理
+        /// </summary>
+        private void OnWindowSizeSelected(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem menuItem || menuItem.Tag is not string sizeKey) return;
+
+            try
+            {
+                // サイズプリセットを取得 (width, height, charSize, chatWidth, chatHeight)
+                var (width, height, charSize, chatWidth, chatHeight) = sizeKey switch
+                {
+                    "Small" => (180.0, 200.0, 160.0, 170.0, 190.0),
+                    "Medium" => (240.0, 267.0, 220.0, 230.0, 257.0),
+                    "Large" => (360.0, 400.0, 320.0, 340.0, 380.0),
+                    _ => (360.0, 400.0, 320.0, 340.0, 380.0)
+                };
+
+                // 設定を更新
+                AppSettings.Instance.Assistant.WindowSize = sizeKey;
+                AppSettings.Instance.Assistant.WindowWidth = width;
+                AppSettings.Instance.Assistant.WindowHeight = height;
+                AppSettings.Instance.Save();
+
+                // ウィンドウサイズを適用
+                this.Width = width;
+                this.Height = height;
+
+                // キャラクター表示エリアをリサイズ（GIFは自動的にUniformでスケール）
+                CharacterBorder.Width = charSize;
+                CharacterBorder.Height = charSize;
+
+                // チャットボックスをリサイズ
+                ChatBalloon.Width = chatWidth;
+                ChatBalloon.Height = chatHeight;
+
+                ShowTransientMessage($"ウィンドウサイズを変更しました: {width}×{height}", 2000);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WindowSize] エラー: {ex.Message}");
+                ShowTransientMessage("サイズの変更に失敗しました", 2000);
+            }
+        }
+
+        #endregion
 
         #region Quick Action Handlers
 

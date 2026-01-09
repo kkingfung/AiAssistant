@@ -36,6 +36,27 @@ namespace AiAssistant
         [JsonPropertyName("Anthropic")]
         public AnthropicSettings Anthropic { get; set; } = new();
 
+        [JsonPropertyName("Claude")]
+        public ClaudeSettings Claude { get; set; } = new();
+
+        [JsonPropertyName("LmStudio")]
+        public LmStudioSettings LmStudio { get; set; } = new();
+
+        [JsonPropertyName("GitHub")]
+        public GitHubSettings GitHub { get; set; } = new();
+
+        [JsonPropertyName("Translation")]
+        public TranslationSettings Translation { get; set; } = new();
+
+        [JsonPropertyName("ChatBubble")]
+        public ChatBubbleSettings ChatBubble { get; set; } = new();
+
+        [JsonPropertyName("Discord")]
+        public DiscordSettings Discord { get; set; } = new();
+
+        [JsonPropertyName("Slack")]
+        public SlackSettings Slack { get; set; } = new();
+
         /// <summary>
         /// シングルトンインスタンスを取得
         /// </summary>
@@ -202,14 +223,17 @@ namespace AiAssistant
         [JsonPropertyName("Theme")]
         public string Theme { get; set; } = "Light"; // "Light" or "Dark"
 
+        [JsonPropertyName("WindowSize")]
+        public string WindowSize { get; set; } = "Medium"; // Small, Medium, Large, ExtraLarge
+
         [JsonPropertyName("WindowWidth")]
-        public double WindowWidth { get; set; } = 280;
+        public double WindowWidth { get; set; } = 360;
 
         [JsonPropertyName("WindowHeight")]
         public double WindowHeight { get; set; } = 400;
 
         [JsonPropertyName("AspectRatio")]
-        public double AspectRatio { get; set; } = 0.7;
+        public double AspectRatio { get; set; } = 0.9;
 
         [JsonPropertyName("SaveWindowPosition")]
         public bool SaveWindowPosition { get; set; } = true;
@@ -306,5 +330,185 @@ namespace AiAssistant
         /// Admin APIが設定されているかどうか
         /// </summary>
         public bool IsConfigured => !string.IsNullOrWhiteSpace(AdminApiKey) && !string.IsNullOrWhiteSpace(OrganizationId);
+    }
+
+    /// <summary>
+    /// Claude API設定
+    /// </summary>
+    public sealed class ClaudeSettings
+    {
+        [JsonPropertyName("ApiKey")]
+        public string ApiKey { get; set; } = string.Empty;
+
+        [JsonPropertyName("Model")]
+        public string Model { get; set; } = "claude-sonnet-4-20250514";
+
+        [JsonPropertyName("MaxTokens")]
+        public int MaxTokens { get; set; } = 2000;
+
+        [JsonPropertyName("Temperature")]
+        public double Temperature { get; set; } = 0.7;
+
+        /// <summary>
+        /// APIキーが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey) && ApiKey != "YOUR_CLAUDE_API_KEY_HERE";
+    }
+
+    /// <summary>
+    /// LM Studio設定（OpenAI互換ローカルAPI）
+    /// </summary>
+    public sealed class LmStudioSettings
+    {
+        [JsonPropertyName("Enabled")]
+        public bool Enabled { get; set; } = false;
+
+        [JsonPropertyName("Endpoint")]
+        public string Endpoint { get; set; } = "http://localhost:1234";
+
+        [JsonPropertyName("Model")]
+        public string Model { get; set; } = "local-model";
+
+        [JsonPropertyName("MaxTokens")]
+        public int MaxTokens { get; set; } = 2000;
+
+        [JsonPropertyName("Temperature")]
+        public double Temperature { get; set; } = 0.7;
+
+        /// <summary>
+        /// LM Studioが有効かどうか
+        /// </summary>
+        public bool ShouldUse => Enabled;
+    }
+
+    /// <summary>
+    /// GitHub設定
+    /// </summary>
+    public sealed class GitHubSettings
+    {
+        [JsonPropertyName("PersonalAccessToken")]
+        public string PersonalAccessToken { get; set; } = string.Empty;
+
+        [JsonPropertyName("DefaultRepository")]
+        public string DefaultRepository { get; set; } = string.Empty;
+
+        [JsonPropertyName("ShowNotifications")]
+        public bool ShowNotifications { get; set; } = true;
+
+        [JsonPropertyName("RefreshIntervalMinutes")]
+        public int RefreshIntervalMinutes { get; set; } = 5;
+
+        /// <summary>
+        /// トークンが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(PersonalAccessToken) && PersonalAccessToken != "YOUR_GITHUB_TOKEN_HERE";
+    }
+
+    /// <summary>
+    /// 翻訳サービス設定
+    /// </summary>
+    public sealed class TranslationSettings
+    {
+        [JsonPropertyName("Enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("HotkeyModifiers")]
+        public string HotkeyModifiers { get; set; } = "Ctrl+Shift";
+
+        [JsonPropertyName("HotkeyKey")]
+        public string HotkeyKey { get; set; } = "T";
+
+        [JsonPropertyName("DefaultTargetLanguage")]
+        public string DefaultTargetLanguage { get; set; } = "Japanese";
+
+        [JsonPropertyName("AutoDetectLanguage")]
+        public bool AutoDetectLanguage { get; set; } = true;
+
+        [JsonPropertyName("ShowNotification")]
+        public bool ShowNotification { get; set; } = true;
+
+        [JsonPropertyName("CopyToClipboard")]
+        public bool CopyToClipboard { get; set; } = true;
+    }
+
+    /// <summary>
+    /// チャットバブルスタイル設定
+    /// </summary>
+    public sealed class ChatBubbleSettings
+    {
+        [JsonPropertyName("Preset")]
+        public string Preset { get; set; } = "Modern";
+
+        [JsonPropertyName("CustomStyle")]
+        public ChatBubbleStyle? CustomStyle { get; set; }
+
+        /// <summary>
+        /// 現在のスタイルを取得します
+        /// </summary>
+        public ChatBubbleStyle GetCurrentStyle()
+        {
+            if (Preset == "Custom" && CustomStyle != null)
+            {
+                return CustomStyle;
+            }
+
+            if (Enum.TryParse<ChatBubblePreset>(Preset, out var preset))
+            {
+                return ChatBubbleStyle.FromPreset(preset);
+            }
+
+            return ChatBubbleStyle.FromPreset(ChatBubblePreset.Modern);
+        }
+    }
+
+    /// <summary>
+    /// Discord設定
+    /// </summary>
+    public sealed class DiscordSettings
+    {
+        [JsonPropertyName("WebhookUrl")]
+        public string WebhookUrl { get; set; } = string.Empty;
+
+        [JsonPropertyName("BotToken")]
+        public string BotToken { get; set; } = string.Empty;
+
+        [JsonPropertyName("ShowNotifications")]
+        public bool ShowNotifications { get; set; } = true;
+
+        [JsonPropertyName("LastStatusText")]
+        public string LastStatusText { get; set; } = string.Empty;
+
+        [JsonPropertyName("LastEmoji")]
+        public string LastEmoji { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Webhookが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(WebhookUrl) &&
+                                   WebhookUrl.StartsWith("https://discord.com/api/webhooks/");
+    }
+
+    /// <summary>
+    /// Slack設定
+    /// </summary>
+    public sealed class SlackSettings
+    {
+        [JsonPropertyName("UserToken")]
+        public string UserToken { get; set; } = string.Empty;
+
+        [JsonPropertyName("BotToken")]
+        public string BotToken { get; set; } = string.Empty;
+
+        [JsonPropertyName("DefaultWorkspace")]
+        public string DefaultWorkspace { get; set; } = string.Empty;
+
+        [JsonPropertyName("ShowNotifications")]
+        public bool ShowNotifications { get; set; } = true;
+
+        /// <summary>
+        /// User Tokenが設定されているかどうか
+        /// </summary>
+        public bool IsConfigured => !string.IsNullOrWhiteSpace(UserToken) &&
+                                   UserToken.StartsWith("xoxp-");
     }
 }

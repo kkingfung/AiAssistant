@@ -18,14 +18,43 @@ namespace AiAssistant
         /// </summary>
         public static TextBlock CreateFormattedTextBlock(string markdownText, bool isUser)
         {
+            return CreateFormattedTextBlock(markdownText, isUser, null);
+        }
+
+        /// <summary>
+        /// Markdownテキストから装飾されたTextBlockを作成します（スタイル指定版）
+        /// </summary>
+        public static TextBlock CreateFormattedTextBlock(string markdownText, bool isUser, ChatBubbleStyle? style)
+        {
             var settings = AppSettings.Instance.Assistant;
             var isDark = settings.IsDarkTheme;
+
+            // スタイルから色とフォントを取得
+            Color textColor;
+            double fontSize;
+            FontFamily fontFamily;
+
+            if (style != null)
+            {
+                textColor = isUser
+                    ? ChatBubbleStyle.ParseColor(style.UserTextColor)
+                    : ChatBubbleStyle.ParseColor(isDark ? style.AiTextColorDark : style.AiTextColorLight);
+                fontSize = style.FontSize;
+                fontFamily = new FontFamily(style.FontFamily);
+            }
+            else
+            {
+                textColor = isUser ? Colors.White : (isDark ? Color.FromRgb(220, 220, 220) : Colors.Black);
+                fontSize = 13;
+                fontFamily = new FontFamily("Segoe UI");
+            }
 
             var textBlock = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = isUser ? Brushes.White : (isDark ? new SolidColorBrush(Color.FromRgb(220, 220, 220)) : Brushes.Black),
-                FontSize = 13
+                Foreground = new SolidColorBrush(textColor),
+                FontSize = fontSize,
+                FontFamily = fontFamily
             };
 
             if (string.IsNullOrWhiteSpace(markdownText))
@@ -42,7 +71,7 @@ namespace AiAssistant
                 if (i % 3 == 0)
                 {
                     // 通常のテキスト部分
-                    ProcessInlineFormatting(textBlock, parts[i], isUser);
+                    ProcessInlineFormatting(textBlock, parts[i], isUser, textColor);
                 }
                 else if (i % 3 == 2)
                 {
@@ -57,7 +86,7 @@ namespace AiAssistant
         /// <summary>
         /// インライン書式（太字、斜体、インラインコード）を処理します
         /// </summary>
-        private static void ProcessInlineFormatting(TextBlock textBlock, string text, bool isUser)
+        private static void ProcessInlineFormatting(TextBlock textBlock, string text, bool isUser, Color textColor)
         {
             if (string.IsNullOrEmpty(text))
             {
@@ -73,7 +102,7 @@ namespace AiAssistant
                 if (i % 2 == 0)
                 {
                     // 通常のテキスト（太字・斜体を処理）
-                    ProcessBoldAndItalic(textBlock, parts[i], isUser);
+                    ProcessBoldAndItalic(textBlock, parts[i], textColor);
                 }
                 else
                 {
@@ -93,15 +122,12 @@ namespace AiAssistant
         /// <summary>
         /// 太字（**text**）と斜体（*text*）を処理します
         /// </summary>
-        private static void ProcessBoldAndItalic(TextBlock textBlock, string text, bool isUser)
+        private static void ProcessBoldAndItalic(TextBlock textBlock, string text, Color textColor)
         {
             if (string.IsNullOrEmpty(text))
             {
                 return;
             }
-
-            var settings = AppSettings.Instance.Assistant;
-            var isDark = settings.IsDarkTheme;
 
             // 太字 **text**
             var boldPattern = @"\*\*([^\*]+)\*\*";
@@ -112,7 +138,7 @@ namespace AiAssistant
                 if (i % 2 == 0)
                 {
                     // 通常のテキスト
-                    AddPlainText(textBlock, parts[i], isUser);
+                    AddPlainText(textBlock, parts[i], textColor);
                 }
                 else
                 {
@@ -120,7 +146,7 @@ namespace AiAssistant
                     var run = new Run(parts[i])
                     {
                         FontWeight = FontWeights.Bold,
-                        Foreground = isUser ? Brushes.White : (isDark ? new SolidColorBrush(Color.FromRgb(220, 220, 220)) : Brushes.Black)
+                        Foreground = new SolidColorBrush(textColor)
                     };
                     textBlock.Inlines.Add(run);
                 }
@@ -130,19 +156,16 @@ namespace AiAssistant
         /// <summary>
         /// プレーンテキストを追加します
         /// </summary>
-        private static void AddPlainText(TextBlock textBlock, string text, bool isUser)
+        private static void AddPlainText(TextBlock textBlock, string text, Color textColor)
         {
             if (string.IsNullOrEmpty(text))
             {
                 return;
             }
 
-            var settings = AppSettings.Instance.Assistant;
-            var isDark = settings.IsDarkTheme;
-
             var run = new Run(text)
             {
-                Foreground = isUser ? Brushes.White : (isDark ? new SolidColorBrush(Color.FromRgb(220, 220, 220)) : Brushes.Black)
+                Foreground = new SolidColorBrush(textColor)
             };
             textBlock.Inlines.Add(run);
         }
