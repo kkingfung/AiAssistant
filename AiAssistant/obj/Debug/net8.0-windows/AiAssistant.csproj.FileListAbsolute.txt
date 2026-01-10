@@ -98,3 +98,7 @@ D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\System.Speec
 D:\PersonalGameDev\AiAssistant\AiAssistant\bin\Debug\net8.0-windows\runtimes\win\lib\net8.0\System.Speech.dll
 D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\InputDialog.baml
 D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\InputDialog.g.cs
+D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\CodeInputDialog.baml
+D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\CodeInputDialog.g.cs
+D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\LearningResultDialog.baml
+D:\PersonalGameDev\AiAssistant\AiAssistant\obj\Debug\net8.0-windows\LearningResultDialog.g.cs

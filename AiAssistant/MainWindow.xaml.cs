@@ -50,6 +50,7 @@ namespace AiAssistant
         private MediaControlService? _mediaControlService;
         private DailyGoalsService? _dailyGoalsService;
         private ScreenshotOcrService? _screenshotService;
+        private IEducationService? _educationService;
 
         // 翻訳用ホットキー
         private const int TRANSLATE_HOTKEY_ID = 0xB002;
@@ -269,6 +270,10 @@ namespace AiAssistant
             {
                 _translationService = new TranslationService(_viewModel.AiService);
                 Console.WriteLine("[Translation] 翻訳サービスを初期化しました");
+
+                // 教育サービスも初期化
+                _educationService = new EducationService(_viewModel.AiService);
+                Console.WriteLine("[Education] 教育サービスを初期化しました");
             }
         }
 
@@ -2075,6 +2080,1035 @@ namespace AiAssistant
         }
 
         /// <summary>
+        /// 教育機能メニュー（言語・プログラミング学習）を表示
+        /// </summary>
+        private void OnEducationButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button button) return;
+
+            var contextMenu = new ContextMenu();
+
+            // 言語学習セクション
+            var languageMenu = new MenuItem { Header = "🌍 言語学習" };
+
+            // 英語
+            var englishMenu = new MenuItem { Header = "🇺🇸 English" };
+            var engGrammarItem = new MenuItem { Header = "📝 文法チェック" };
+            engGrammarItem.Click += async (s, args) => await ShowGrammarCheckDialogAsync(SupportedLanguage.English);
+            var engWordItem = new MenuItem { Header = "📖 単語・フレーズ解説" };
+            engWordItem.Click += async (s, args) => await ShowWordExplanationDialogAsync(SupportedLanguage.English);
+            var engPracticeItem = new MenuItem { Header = "💬 会話練習" };
+            engPracticeItem.Click += (s, args) => StartConversationPracticeAsync(SupportedLanguage.English);
+            var engRandomItem = new MenuItem { Header = "🎲 ランダム単語学習" };
+            engRandomItem.Click += async (s, args) => await ShowRandomWordAsync(SupportedLanguage.English);
+            englishMenu.Items.Add(engGrammarItem);
+            englishMenu.Items.Add(engWordItem);
+            englishMenu.Items.Add(engPracticeItem);
+            englishMenu.Items.Add(new Separator());
+            englishMenu.Items.Add(engRandomItem);
+            languageMenu.Items.Add(englishMenu);
+
+            // 日本語
+            var japaneseMenu = new MenuItem { Header = "🇯🇵 日本語" };
+            var jpGrammarItem = new MenuItem { Header = "📝 文法チェック" };
+            jpGrammarItem.Click += async (s, args) => await ShowGrammarCheckDialogAsync(SupportedLanguage.Japanese);
+            var jpWordItem = new MenuItem { Header = "📖 単語・フレーズ解説" };
+            jpWordItem.Click += async (s, args) => await ShowWordExplanationDialogAsync(SupportedLanguage.Japanese);
+            var jpPracticeItem = new MenuItem { Header = "💬 会話練習" };
+            jpPracticeItem.Click += (s, args) => StartConversationPracticeAsync(SupportedLanguage.Japanese);
+            var jpRandomItem = new MenuItem { Header = "🎲 ランダム単語学習" };
+            jpRandomItem.Click += async (s, args) => await ShowRandomWordAsync(SupportedLanguage.Japanese);
+            japaneseMenu.Items.Add(jpGrammarItem);
+            japaneseMenu.Items.Add(jpWordItem);
+            japaneseMenu.Items.Add(jpPracticeItem);
+            japaneseMenu.Items.Add(new Separator());
+            japaneseMenu.Items.Add(jpRandomItem);
+            languageMenu.Items.Add(japaneseMenu);
+
+            // 韓国語
+            var koreanMenu = new MenuItem { Header = "🇰🇷 한국어" };
+            var koGrammarItem = new MenuItem { Header = "📝 文法チェック" };
+            koGrammarItem.Click += async (s, args) => await ShowGrammarCheckDialogAsync(SupportedLanguage.Korean);
+            var koWordItem = new MenuItem { Header = "📖 単語・フレーズ解説" };
+            koWordItem.Click += async (s, args) => await ShowWordExplanationDialogAsync(SupportedLanguage.Korean);
+            var koPracticeItem = new MenuItem { Header = "💬 会話練習" };
+            koPracticeItem.Click += (s, args) => StartConversationPracticeAsync(SupportedLanguage.Korean);
+            var koRandomItem = new MenuItem { Header = "🎲 ランダム単語学習" };
+            koRandomItem.Click += async (s, args) => await ShowRandomWordAsync(SupportedLanguage.Korean);
+            koreanMenu.Items.Add(koGrammarItem);
+            koreanMenu.Items.Add(koWordItem);
+            koreanMenu.Items.Add(koPracticeItem);
+            koreanMenu.Items.Add(new Separator());
+            koreanMenu.Items.Add(koRandomItem);
+            languageMenu.Items.Add(koreanMenu);
+
+            contextMenu.Items.Add(languageMenu);
+            contextMenu.Items.Add(new Separator());
+
+            // プログラミング学習セクション
+            var programmingMenu = new MenuItem { Header = "💻 プログラミング" };
+
+            // コードレビュー
+            var codeReviewMenu = new MenuItem { Header = "🔍 コードレビュー" };
+            AddProgrammingLanguageItems(codeReviewMenu, "review");
+            programmingMenu.Items.Add(codeReviewMenu);
+
+            // エラー解説
+            var debugHelpMenu = new MenuItem { Header = "🐛 エラー解説・デバッグ" };
+            AddProgrammingLanguageItems(debugHelpMenu, "debug");
+            programmingMenu.Items.Add(debugHelpMenu);
+
+            // 概念説明
+            var conceptMenu = new MenuItem { Header = "📚 概念・パターン解説" };
+            AddProgrammingLanguageItems(conceptMenu, "concept");
+            programmingMenu.Items.Add(conceptMenu);
+
+            // コード改善
+            var improveMenu = new MenuItem { Header = "✨ コード改善提案" };
+            AddProgrammingLanguageItems(improveMenu, "improve");
+            programmingMenu.Items.Add(improveMenu);
+
+            programmingMenu.Items.Add(new Separator());
+
+            // ランダムAPI学習
+            var randomApiMenu = new MenuItem { Header = "🎲 ランダムAPI学習" };
+            AddProgrammingLanguageItems(randomApiMenu, "randomApi");
+            programmingMenu.Items.Add(randomApiMenu);
+
+            // ランダム概念学習
+            var randomConceptMenu = new MenuItem { Header = "🎯 ランダム概念学習" };
+            AddProgrammingLanguageItems(randomConceptMenu, "randomConcept");
+            programmingMenu.Items.Add(randomConceptMenu);
+
+            contextMenu.Items.Add(programmingMenu);
+            contextMenu.Items.Add(new Separator());
+
+            // クリップボードのコードを操作
+            var clipboardMenu = new MenuItem { Header = "📋 クリップボードのコード" };
+            var clipReviewItem = new MenuItem { Header = "🔍 レビュー" };
+            clipReviewItem.Click += async (s, args) => await ReviewClipboardCodeAsync();
+            var clipImproveItem = new MenuItem { Header = "✨ 改善提案" };
+            clipImproveItem.Click += async (s, args) => await ImproveClipboardCodeAsync();
+            clipboardMenu.Items.Add(clipReviewItem);
+            clipboardMenu.Items.Add(clipImproveItem);
+            contextMenu.Items.Add(clipboardMenu);
+
+            contextMenu.PlacementTarget = button;
+            contextMenu.Placement = PlacementMode.Bottom;
+            contextMenu.IsOpen = true;
+        }
+
+        /// <summary>
+        /// プログラミング言語メニュー項目を追加します
+        /// </summary>
+        private void AddProgrammingLanguageItems(MenuItem parentMenu, string action)
+        {
+            var languages = new[]
+            {
+                (ProgrammingLanguage.CSharp, "💻 C#"),
+                (ProgrammingLanguage.Python, "🐍 Python"),
+                (ProgrammingLanguage.JavaScript, "📜 JavaScript"),
+                (ProgrammingLanguage.TypeScript, "📘 TypeScript"),
+                (ProgrammingLanguage.Java, "☕ Java"),
+                (ProgrammingLanguage.Rust, "🦀 Rust"),
+                (ProgrammingLanguage.Go, "🐹 Go"),
+                (ProgrammingLanguage.Ruby, "💎 Ruby"),
+                (ProgrammingLanguage.PHP, "🐘 PHP"),
+                (ProgrammingLanguage.Cpp, "⚡ C++"),
+                (ProgrammingLanguage.Swift, "🎯 Swift"),
+                (ProgrammingLanguage.Kotlin, "🎯 Kotlin")
+            };
+
+            foreach (var (lang, label) in languages)
+            {
+                var item = new MenuItem { Header = label };
+                var capturedLang = lang;
+                item.Click += async (s, args) =>
+                {
+                    switch (action)
+                    {
+                        case "review":
+                            await ShowCodeReviewDialogAsync(capturedLang);
+                            break;
+                        case "debug":
+                            await ShowDebugHelpDialogAsync(capturedLang);
+                            break;
+                        case "concept":
+                            await ShowConceptExplanationDialogAsync(capturedLang);
+                            break;
+                        case "improve":
+                            await ShowCodeImprovementDialogAsync(capturedLang);
+                            break;
+                        case "randomApi":
+                            await ShowRandomApiAsync(capturedLang);
+                            break;
+                        case "randomConcept":
+                            await ShowRandomConceptAsync(capturedLang);
+                            break;
+                    }
+                };
+                parentMenu.Items.Add(item);
+            }
+        }
+
+        #region Education Service Handlers
+
+        /// <summary>
+        /// 文法チェックダイアログを表示します
+        /// </summary>
+        private async Task ShowGrammarCheckDialogAsync(SupportedLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = language switch
+            {
+                SupportedLanguage.English => "英語",
+                SupportedLanguage.Japanese => "日本語",
+                SupportedLanguage.Korean => "韓国語",
+                _ => "英語"
+            };
+
+            var text = InputDialog.Show($"{langName}の文法チェック", "チェックするテキストを入力してください:", "", this);
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            ShowTransientMessage($"📝 {langName}の文法をチェックしています...", 3000);
+
+            try
+            {
+                var result = await _educationService.CheckGrammarAsync(text, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"📝 {langName}文法チェック結果\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【元のテキスト】\n{result.OriginalText}");
+                    sb.AppendLine($"\n【修正後】\n{result.CorrectedText}");
+
+                    if (result.HasIssues)
+                    {
+                        sb.AppendLine("\n【問題点】");
+                        foreach (var issue in result.Issues)
+                        {
+                            sb.AppendLine($"\n  ❌ {issue.Original}");
+                            sb.AppendLine($"  ✅ {issue.Correction}");
+                            sb.AppendLine($"  💡 {issue.Explanation}");
+                        }
+                    }
+                    else
+                    {
+                        sb.AppendLine("\n✅ 文法に問題はありません！");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"📝 {langName}文法チェック",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 単語説明ダイアログを表示します
+        /// </summary>
+        private async Task ShowWordExplanationDialogAsync(SupportedLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = language switch
+            {
+                SupportedLanguage.English => "英語",
+                SupportedLanguage.Japanese => "日本語",
+                SupportedLanguage.Korean => "韓国語",
+                _ => "英語"
+            };
+
+            var word = InputDialog.Show($"{langName}の単語・フレーズ解説", "解説してほしい単語やフレーズを入力:", "", this);
+            if (string.IsNullOrWhiteSpace(word)) return;
+
+            ShowTransientMessage($"📖 「{word}」を調べています...", 3000);
+
+            try
+            {
+                var result = await _educationService.ExplainWordAsync(word, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"📖 「{result.Word}」の解説\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【意味】 {result.Definition}");
+
+                    if (!string.IsNullOrEmpty(result.Pronunciation))
+                    {
+                        sb.AppendLine($"【発音】 {result.Pronunciation}");
+                    }
+
+                    if (result.ExampleSentences.Count > 0)
+                    {
+                        sb.AppendLine("\n【例文】");
+                        foreach (var example in result.ExampleSentences)
+                        {
+                            sb.AppendLine($"  • {example}");
+                        }
+                    }
+
+                    if (result.Synonyms.Count > 0)
+                    {
+                        sb.AppendLine($"\n【類義語】 {string.Join(", ", result.Synonyms)}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"📖 「{result.Word}」",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 会話練習を開始します
+        /// </summary>
+        private void StartConversationPracticeAsync(SupportedLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = language switch
+            {
+                SupportedLanguage.English => "英語",
+                SupportedLanguage.Japanese => "日本語",
+                SupportedLanguage.Korean => "韓国語",
+                _ => "英語"
+            };
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"💬 **{langName}会話練習モード**\n");
+            sb.AppendLine($"{langName}で話しかけてください。間違いがあれば優しく修正します。\n");
+            sb.AppendLine("終了するには「終了」または「exit」と入力してください。");
+
+            OpenChatAndShowMessage(sb.ToString());
+
+            // 会話練習は通常のチャットで行う（特別なモード設定なし）
+            ShowTransientMessage($"{langName}会話練習を開始しました", 2000);
+        }
+
+        /// <summary>
+        /// コードレビューダイアログを表示します
+        /// </summary>
+        private async Task ShowCodeReviewDialogAsync(ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            var code = CodeInputDialog.Show($"{langName}コードレビュー", "レビューするコードを貼り付けてください:", "", this);
+            if (string.IsNullOrWhiteSpace(code)) return;
+
+            ShowTransientMessage($"🔍 {langName}コードをレビューしています...", 3000);
+
+            try
+            {
+                var result = await _educationService.ReviewCodeAsync(code, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"🔍 {langName}コードレビュー結果\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【総合スコア】 {result.OverallScore}/10");
+                    sb.AppendLine($"【概要】 {result.Summary}");
+
+                    if (result.Items.Count > 0)
+                    {
+                        sb.AppendLine("\n【詳細】");
+                        foreach (var item in result.Items)
+                        {
+                            var severityEmoji = item.Severity switch
+                            {
+                                "Critical" => "🔴",
+                                "Warning" => "🟡",
+                                _ => "🔵"
+                            };
+                            sb.AppendLine($"\n{severityEmoji} [{item.Category}] {item.Description}");
+                            if (!string.IsNullOrEmpty(item.Suggestion))
+                            {
+                                sb.AppendLine($"   💡 {item.Suggestion}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        sb.AppendLine("\n✅ 問題は見つかりませんでした！");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"🔍 {langName}コードレビュー",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// デバッグヘルプダイアログを表示します
+        /// </summary>
+        private async Task ShowDebugHelpDialogAsync(ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            var errorMsg = CodeInputDialog.Show($"{langName}エラー解説", "エラーメッセージを入力してください:", "", this);
+            if (string.IsNullOrWhiteSpace(errorMsg)) return;
+
+            var code = CodeInputDialog.Show("コード（任意）", "関連するコードがあれば貼り付けてください（なければ空のまま）:", "", this);
+
+            ShowTransientMessage($"🐛 エラーを分析しています...", 3000);
+
+            try
+            {
+                var result = await _educationService.ExplainErrorAsync(code ?? "", errorMsg, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"🐛 {langName}エラー解説\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【エラー】 {result.ErrorMessage}");
+                    sb.AppendLine($"\n【説明】\n{result.Explanation}");
+                    sb.AppendLine($"\n【原因】\n{result.PossibleCause}");
+                    sb.AppendLine($"\n【解決方法】\n{result.SuggestedFix}");
+
+                    if (!string.IsNullOrEmpty(result.FixedCode))
+                    {
+                        sb.AppendLine($"\n【修正コード】\n{result.FixedCode}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"🐛 {langName}エラー解説",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.Error}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// 概念説明ダイアログを表示します
+        /// </summary>
+        private async Task ShowConceptExplanationDialogAsync(ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            var topic = InputDialog.Show($"{langName}概念解説", "学びたい概念やパターンを入力してください\n（例: async/await, SOLID, デザインパターン）:", "", this);
+            if (string.IsNullOrWhiteSpace(topic)) return;
+
+            ShowTransientMessage($"📚 「{topic}」について調べています...", 3000);
+
+            try
+            {
+                var result = await _educationService.ExplainConceptAsync(topic, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"📚 {topic} ({langName})\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【説明】\n{result.Explanation}");
+
+                    if (result.KeyPoints.Count > 0)
+                    {
+                        sb.AppendLine("\n【ポイント】");
+                        foreach (var point in result.KeyPoints)
+                        {
+                            sb.AppendLine($"  • {point}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.CodeExample))
+                    {
+                        sb.AppendLine($"\n【コード例】\n{result.CodeExample}");
+                    }
+
+                    if (result.RelatedTopics.Count > 0)
+                    {
+                        sb.AppendLine($"\n【関連トピック】 {string.Join(", ", result.RelatedTopics)}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"📚 {topic}",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// コード改善ダイアログを表示します
+        /// </summary>
+        private async Task ShowCodeImprovementDialogAsync(ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            var code = CodeInputDialog.Show($"{langName}コード改善", "改善したいコードを貼り付けてください:", "", this);
+            if (string.IsNullOrWhiteSpace(code)) return;
+
+            ShowTransientMessage($"✨ {langName}コードの改善点を分析しています...", 3000);
+
+            try
+            {
+                var result = await _educationService.SuggestImprovementsAsync(code, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"✨ {langName}コード改善提案\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    if (result.Improvements.Count > 0)
+                    {
+                        sb.AppendLine("\n【改善点】");
+                        foreach (var improvement in result.Improvements)
+                        {
+                            sb.AppendLine($"\n📌 [{improvement.Category}]");
+                            sb.AppendLine($"   変更前: {improvement.Before}");
+                            sb.AppendLine($"   変更後: {improvement.After}");
+                            sb.AppendLine($"   理由: {improvement.Explanation}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.ImprovedCode))
+                    {
+                        sb.AppendLine($"\n【改善後のコード】\n{result.ImprovedCode}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"✨ {langName}コード改善提案",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// クリップボードのコードをレビューします
+        /// </summary>
+        private async Task ReviewClipboardCodeAsync()
+        {
+            var code = GetClipboardText();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                ShowTransientMessage("クリップボードにテキストがありません", 2000);
+                return;
+            }
+
+            // 言語を自動検出（簡易版）
+            var language = DetectProgrammingLanguage(code);
+            await ShowCodeReviewFromCodeAsync(code, language);
+        }
+
+        /// <summary>
+        /// クリップボードのコードを改善します
+        /// </summary>
+        private async Task ImproveClipboardCodeAsync()
+        {
+            var code = GetClipboardText();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                ShowTransientMessage("クリップボードにテキストがありません", 2000);
+                return;
+            }
+
+            var language = DetectProgrammingLanguage(code);
+            await ShowCodeImprovementFromCodeAsync(code, language);
+        }
+
+        /// <summary>
+        /// コードから直接レビューを実行します
+        /// </summary>
+        private async Task ShowCodeReviewFromCodeAsync(string code, ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            ShowTransientMessage($"🔍 {langName}コードをレビューしています...", 3000);
+
+            try
+            {
+                var result = await _educationService.ReviewCodeAsync(code, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"🔍 {langName}コードレビュー結果\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【総合スコア】 {result.OverallScore}/10");
+                    sb.AppendLine($"【概要】 {result.Summary}");
+
+                    if (result.Items.Count > 0)
+                    {
+                        sb.AppendLine("\n【詳細】");
+                        foreach (var item in result.Items)
+                        {
+                            var severityEmoji = item.Severity switch
+                            {
+                                "Critical" => "🔴",
+                                "Warning" => "🟡",
+                                _ => "🔵"
+                            };
+                            sb.AppendLine($"\n{severityEmoji} [{item.Category}] {item.Description}");
+                            if (!string.IsNullOrEmpty(item.Suggestion))
+                            {
+                                sb.AppendLine($"   💡 {item.Suggestion}");
+                            }
+                        }
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"🔍 {langName}コードレビュー",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// コードから直接改善を実行します
+        /// </summary>
+        private async Task ShowCodeImprovementFromCodeAsync(string code, ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            ShowTransientMessage($"✨ {langName}コードの改善点を分析しています...", 3000);
+
+            try
+            {
+                var result = await _educationService.SuggestImprovementsAsync(code, language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"✨ {langName}コード改善提案\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+                    if (result.Improvements.Count > 0)
+                    {
+                        sb.AppendLine("\n【改善点】");
+                        foreach (var improvement in result.Improvements)
+                        {
+                            sb.AppendLine($"\n📌 [{improvement.Category}]");
+                            sb.AppendLine($"   理由: {improvement.Explanation}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.ImprovedCode))
+                    {
+                        sb.AppendLine($"\n【改善後のコード】\n{result.ImprovedCode}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"✨ {langName}コード改善提案",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// プログラミング言語の表示名を取得します
+        /// </summary>
+        private static string GetProgrammingLanguageDisplayName(ProgrammingLanguage language)
+        {
+            return language switch
+            {
+                ProgrammingLanguage.CSharp => "C#",
+                ProgrammingLanguage.Python => "Python",
+                ProgrammingLanguage.JavaScript => "JavaScript",
+                ProgrammingLanguage.TypeScript => "TypeScript",
+                ProgrammingLanguage.Java => "Java",
+                ProgrammingLanguage.Rust => "Rust",
+                ProgrammingLanguage.Go => "Go",
+                ProgrammingLanguage.Ruby => "Ruby",
+                ProgrammingLanguage.PHP => "PHP",
+                ProgrammingLanguage.C => "C",
+                ProgrammingLanguage.Cpp => "C++",
+                ProgrammingLanguage.Swift => "Swift",
+                ProgrammingLanguage.Kotlin => "Kotlin",
+                _ => "Unknown"
+            };
+        }
+
+        /// <summary>
+        /// コードからプログラミング言語を簡易検出します
+        /// </summary>
+        private static ProgrammingLanguage DetectProgrammingLanguage(string code)
+        {
+            if (code.Contains("using System") || code.Contains("namespace ") || code.Contains("public class") || code.Contains("async Task"))
+                return ProgrammingLanguage.CSharp;
+            if (code.Contains("def ") || code.Contains("import ") && !code.Contains("import {"))
+                return ProgrammingLanguage.Python;
+            if (code.Contains("interface ") && code.Contains(": "))
+                return ProgrammingLanguage.TypeScript;
+            if (code.Contains("function ") || code.Contains("const ") || code.Contains("let ") || code.Contains("=>"))
+                return ProgrammingLanguage.JavaScript;
+            if (code.Contains("public static void main") || code.Contains("System.out.println"))
+                return ProgrammingLanguage.Java;
+            if (code.Contains("fn ") || code.Contains("let mut ") || code.Contains("impl "))
+                return ProgrammingLanguage.Rust;
+            if (code.Contains("func ") && code.Contains("package "))
+                return ProgrammingLanguage.Go;
+            if (code.Contains("<?php") || code.Contains("$_"))
+                return ProgrammingLanguage.PHP;
+            if (code.Contains("#include") || code.Contains("int main("))
+                return ProgrammingLanguage.Cpp;
+
+            return ProgrammingLanguage.CSharp; // デフォルト
+        }
+
+        /// <summary>
+        /// ランダム単語学習を表示します
+        /// </summary>
+        private async Task ShowRandomWordAsync(SupportedLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = language switch
+            {
+                SupportedLanguage.English => "英語",
+                SupportedLanguage.Japanese => "日本語",
+                SupportedLanguage.Korean => "韓国語",
+                _ => "英語"
+            };
+
+            ShowTransientMessage($"🎲 {langName}のランダムな単語を選んでいます...", 3000);
+
+            try
+            {
+                var result = await _educationService.GetRandomWordAsync(language, LanguageLevel.Intermediate);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"🎲 {langName}ランダム単語学習\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【単語】 {result.Word}");
+                    if (!string.IsNullOrEmpty(result.Pronunciation))
+                    {
+                        sb.AppendLine($"【発音】 {result.Pronunciation}");
+                    }
+                    sb.AppendLine($"【意味】 {result.Definition}");
+                    if (!string.IsNullOrEmpty(result.Category))
+                    {
+                        sb.AppendLine($"【カテゴリ】 {result.Category}");
+                    }
+
+                    if (result.ExampleSentences.Count > 0)
+                    {
+                        sb.AppendLine("\n【例文】");
+                        foreach (var example in result.ExampleSentences)
+                        {
+                            sb.AppendLine($"  • {example}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.UsageNote))
+                    {
+                        sb.AppendLine($"\n【使い方のポイント】\n  {result.UsageNote}");
+                    }
+
+                    if (result.RelatedWords.Count > 0)
+                    {
+                        sb.AppendLine($"\n【関連語】 {string.Join(", ", result.RelatedWords)}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"🎲 {langName}ランダム単語学習",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// ランダムAPI学習を表示します
+        /// </summary>
+        private async Task ShowRandomApiAsync(ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            ShowTransientMessage($"🎲 {langName}のランダムなAPIを選んでいます...", 3000);
+
+            try
+            {
+                var result = await _educationService.GetRandomApiAsync(language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"🎲 {langName} ランダムAPI学習\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【API名】 {result.ApiName}");
+                    if (!string.IsNullOrEmpty(result.Library))
+                    {
+                        sb.AppendLine($"【ライブラリ】 {result.Library}");
+                    }
+                    sb.AppendLine($"【説明】 {result.Description}");
+
+                    if (!string.IsNullOrEmpty(result.Syntax))
+                    {
+                        sb.AppendLine($"\n【構文】\n{result.Syntax}");
+                    }
+
+                    if (result.Parameters.Count > 0)
+                    {
+                        sb.AppendLine("\n【パラメータ】");
+                        foreach (var param in result.Parameters)
+                        {
+                            sb.AppendLine($"  • {param}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.ReturnValue))
+                    {
+                        sb.AppendLine($"\n【戻り値】 {result.ReturnValue}");
+                    }
+
+                    if (!string.IsNullOrEmpty(result.CodeExample))
+                    {
+                        sb.AppendLine($"\n【使用例】\n{result.CodeExample}");
+                    }
+
+                    if (result.UseCases.Count > 0)
+                    {
+                        sb.AppendLine("\n【ユースケース】");
+                        foreach (var useCase in result.UseCases)
+                        {
+                            sb.AppendLine($"  • {useCase}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.Tip))
+                    {
+                        sb.AppendLine($"\n💡 Tips: {result.Tip}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"🎲 {langName} ランダムAPI学習",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        /// <summary>
+        /// ランダム概念学習を表示します
+        /// </summary>
+        private async Task ShowRandomConceptAsync(ProgrammingLanguage language)
+        {
+            if (_educationService == null)
+            {
+                ShowTransientMessage("教育サービスが初期化されていません", 2000);
+                return;
+            }
+
+            var langName = GetProgrammingLanguageDisplayName(language);
+            ShowTransientMessage($"🎯 {langName}のランダムな概念を選んでいます...", 3000);
+
+            try
+            {
+                var result = await _educationService.GetRandomConceptAsync(language);
+                if (result.IsSuccess)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"🎯 {langName} ランダム概念学習\n");
+                    sb.AppendLine($"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    sb.AppendLine($"\n【概念名】 {result.ConceptName}");
+                    if (!string.IsNullOrEmpty(result.Category))
+                    {
+                        sb.AppendLine($"【カテゴリ】 {result.Category}");
+                    }
+                    sb.AppendLine($"\n【説明】\n{result.Explanation}");
+
+                    if (result.KeyPoints.Count > 0)
+                    {
+                        sb.AppendLine("\n【ポイント】");
+                        foreach (var point in result.KeyPoints)
+                        {
+                            sb.AppendLine($"  • {point}");
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(result.CodeExample))
+                    {
+                        sb.AppendLine($"\n【コード例】\n{result.CodeExample}");
+                    }
+
+                    if (!string.IsNullOrEmpty(result.WhenToUse))
+                    {
+                        sb.AppendLine($"\n【いつ使う？】\n{result.WhenToUse}");
+                    }
+
+                    if (result.RelatedConcepts.Count > 0)
+                    {
+                        sb.AppendLine($"\n【関連概念】 {string.Join(", ", result.RelatedConcepts)}");
+                    }
+
+                    var content = sb.ToString();
+                    LearningResultDialog.Show(
+                        $"🎯 {langName} ランダム概念学習",
+                        content,
+                        (note) => _quickNotesService?.AddNote(note),
+                        this);
+                }
+                else
+                {
+                    ShowTransientMessage($"❌ エラー: {result.ErrorMessage}", 3000);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowTransientMessage($"❌ エラーが発生しました: {ex.Message}", 3000);
+            }
+        }
+
+        #endregion
+
+        /// <summary>
         /// 設定メニューを表示
         /// </summary>
         private void OnSettingsButtonClick(object sender, RoutedEventArgs e)
@@ -2872,11 +3906,19 @@ namespace AiAssistant
             try
             {
                 bool success;
-                if (email.IsUnread)
+                bool wasUnread = email.IsUnread;
+
+                if (wasUnread)
                 {
                     success = await _gmailService.MarkAsReadAsync(emailId);
                     if (success)
                     {
+                        // ローカルの状態を更新
+                        email.IsUnread = false;
+                        // ボタンの表示を更新
+                        button.Content = "○";
+                        button.Background = new SolidColorBrush(Color.FromRgb(59, 130, 246)); // 青: 未読にする
+                        button.ToolTip = "未読にする";
                         ShowTransientMessage("既読にしました", 1500);
                     }
                 }
@@ -2885,6 +3927,12 @@ namespace AiAssistant
                     success = await _gmailService.MarkAsUnreadAsync(emailId);
                     if (success)
                     {
+                        // ローカルの状態を更新
+                        email.IsUnread = true;
+                        // ボタンの表示を更新
+                        button.Content = "✓";
+                        button.Background = new SolidColorBrush(Color.FromRgb(34, 197, 94)); // 緑: 既読にする
+                        button.ToolTip = "既読にする";
                         ShowTransientMessage("未読にしました", 1500);
                     }
                 }
@@ -3398,7 +4446,8 @@ namespace AiAssistant
                     };
 
                     var viewItem = new MenuItem { Header = "👁️ 表示" };
-                    viewItem.Click += (s, e) => OpenChatAndShowMessage($"📝 ノート:\n{note.Content}");
+                    var noteContent = note.Content;
+                    viewItem.Click += (s, e) => LearningResultDialog.Show("📝 ノート", noteContent, null, this);
 
                     var copyItem = new MenuItem { Header = "📋 コピー" };
                     copyItem.Click += (s, e) =>

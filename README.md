@@ -8,76 +8,186 @@ WPFと.NET 8.0で構築されたフローティングデスクトップAIアシ�
 
 AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピレーションを受けた、現代的なデスクトップAIアシスタントアプリケーションです。透明な背景のフローティングウィンドウとして常にデスクトップ上に表示され、ユーザーの作業を邪魔することなく利用できます。
 
-ローカルLLM（Ollama）またはChatGPT APIを使用して、自然な会話を通じてユーザーをサポートします。
+複数のAIサービス（Ollama、ChatGPT、Claude、LM Studio）に対応し、自然な会話を通じてユーザーをサポートします。さらに、カレンダー、メール、天気、為替など多彩な統合機能を搭載しています。
 
 **注意**: これは個人プロジェクトであり、販売目的ではありません。
 
 ## 主な機能
 
-### 実装済み ✅
+### AIサービス統合 🤖
 
-- **ローカルLLM統合（Ollama）**
+- **ローカルLLM（Ollama）**
   - 完全無料、オフラインで動作
   - Phi-3 Mini、Mistral、Llama 3.1などのモデルをサポート
   - ストリーミングレスポンスによるリアルタイム表示
   - 会話コンテキストの保持
 
-- **ChatGPT統合**
-  - OpenAI APIによるクラウドAI
+- **ChatGPT（OpenAI）**
+  - GPT-4、GPT-4-turbo、GPT-3.5-turboをサポート
   - 会話履歴の管理
   - ストリーミングレスポンス対応
 
+- **Claude（Anthropic）**
+  - Claude Sonnet 4などの最新モデルをサポート
+  - 組織APIによる使用量確認機能
+
+- **LM Studio**
+  - OpenAI互換ローカルAPI
+  - カスタムモデルのサポート
+
 - **スマートサービス選択**
   - 自動的に最適なAIサービスを選択
-  - 優先順位: ローカルLLM → ChatGPT → デモモード
+  - 優先順位: ローカルLLM → Claude → ChatGPT → デモモード
   - 設定で優先度を変更可能
 
-- **フローティングウィンドウUI**
-  - 常に最前面表示、透明な背景
-  - 画面右下に自動配置
-  - 固定サイズ（360×400px）
-  - タスクバーから非表示
-  - 閉じるボタン（×）付き
+### 生産性向上機能 📊
 
-- **インタラクティブチャット**
-  - キャラクターをクリックしてチャットバルーンを表示
-  - 大型チャットウィンドウ（340×380px）
-  - テキスト入力とEnterキーで送信
-  - リアルタイムストリーミングレスポンス
-  - Markdownフォーマット対応
-  - 送信中は「入力中...」表示と送信ボタン無効化
+- **Google Calendar統合**
+  - 複数カレンダーの同時表示
+  - 週表示・月表示対応
+  - 予定の確認と管理
 
-- **クリックスルーモード**
-  - 右クリックまたはCtrl+Alt+Tで切り替え
-  - マウスクリックをウィンドウを透過（作業の邪魔にならない）
+- **Gmail統合**
+  - メール一覧の表示
+  - 既読/未読の切り替え
 
-- **アニメーションキャラクター** 🐉
-  - 6種類のSciFiペット（Cat、Crab、Dragon、Frog、Shark、Snake）
-  - 54個の透明背景GIFアニメーション（320×320px）
-  - マゼンタクロマキー除去済み
-  - ランダムアニメーション自動切り替え（15秒ごと）
-  - UIからペットを即座に切り替え可能
-  - 右下配置で統一されたサイズ表示
+- **天気情報**
+  - 現在地の天気表示
+  - Open-Meteo APIを使用（無料）
 
-- **ペット選択UI** 🐾
-  - ワンクリックで6種類のペットを切り替え
-  - リアルタイムアニメーション更新
-  - 設定の自動保存
-  - ランダムモード（全ペットをミックス表示）
+- **為替レート**
+  - JPY/HKD/KRW対応
+  - リアルタイムレート表示
 
-- **MVVMアーキテクチャ**
-  - 関心事の明確な分離
-  - サービスベース設計
-  - 適切なキャンセルサポートを持つAsync/await
+- **ファンド価格チェック**
+  - MUFGファンド価格監視
+  - 複数ファンドの同時追跡
+
+- **GitHub統合**
+  - リポジトリ通知
+  - PR/Issue確認
+
+- **ポモドーロタイマー**
+  - 作業/休憩の時間管理
+
+- **デイリーゴール**
+  - 日々の目標設定と追跡
+
+- **クイックノート**
+  - 素早いメモ作成
+
+- **クリップボード履歴**
+  - コピー履歴の管理
+
+### コミュニケーション連携 💬
+
+- **Discord統合**
+  - Webhookによるステータス更新
+  - 通知機能
+
+- **Slack統合**
+  - ステータス更新
+  - ワークスペース連携
+
+- **翻訳サービス**
+  - AIを使用した即時翻訳
+  - ホットキー対応（Ctrl+Shift+T）
+  - 自動言語検出
+
+### 音声機能 🎤
+
+- **音声入力**
+  - Windows Speech Recognition使用
+  - マイクからのテキスト入力
+
+- **音声出力**
+  - テキスト読み上げ機能
+  - System.Speech使用
+
+### 教育機能 📚
+
+- **言語学習サポート**
+  - 🇺🇸 English（英語）
+  - 🇯🇵 日本語（Japanese）
+  - 🇰🇷 한국어（Korean）
+  - 文法チェックと修正提案
+  - 会話練習パートナー
+  - 単語・フレーズの解説
+
+- **プログラミング学習**
+  - 💻 **C#** - .NET開発、Unity
+  - 🐍 **Python** - データサイエンス、AI/ML
+  - 📜 **JavaScript/TypeScript** - Web開発
+  - ☕ **Java** - エンタープライズ、Android
+  - 🦀 **Rust** - システムプログラミング
+  - 🐹 **Go** - バックエンド、クラウド
+  - 💎 **Ruby** - Web開発
+  - 🐘 **PHP** - Web開発
+  - ⚡ **C/C++** - システム、組み込み
+  - 🎯 **Swift/Kotlin** - モバイル開発
+
+- **学習サポート機能**
+  - コードレビューと改善提案
+  - エラー解説とデバッグヘルプ
+  - ベストプラクティスの説明
+  - アルゴリズムと設計パターン解説
+  - 技術面接対策
+
+### フローティングウィンドウUI 🖼️
+
+- 常に最前面表示、透明な背景
+- 画面位置の保存と復元
+- カスタマイズ可能なサイズ
+- タスクバーから非表示
+- ダーク/ライトテーマ対応
+
+### インタラクティブチャット 💭
+
+- チャットバルーンによる会話表示
+- リアルタイムストリーミングレスポンス
+- Markdownフォーマット対応
+- カスタマイズ可能なチャットバブルスタイル
+- 会話履歴の永続化
+
+### クリックスルーモード 👆
+
+- 右クリックまたはCtrl+Alt+Tで切り替え
+- マウスクリックがウィンドウを透過（作業の邪魔にならない）
+
+### アニメーションキャラクター 🐉
+
+- 6種類のSciFiペット（Cat、Crab、Dragon、Frog、Shark、Snake）
+- 54個の透明背景アニメーション（320×320px）
+- マゼンタクロマキー自動除去
+- ランダムアニメーション自動切り替え（15秒ごと）
+- ペット選択UI付き
+- ランダムモード（全ペットをミックス表示）
+
+### MVVMアーキテクチャ
+
+- 関心事の明確な分離
+- サービスベース設計
+- 適切なキャンセルサポートを持つAsync/await
 
 ## 技術スタック
 
 - **.NET 8.0** - ターゲットフレームワーク
 - **WPF** - UIフレームワーク
-- **C# with nullable reference types**
+- **C# 12** with nullable reference types
 - **MVVM Pattern** - アーキテクチャ
-- **OllamaSharp** - ローカルLLM統合
-- **OpenAI SDK** - ChatGPT統合
+
+### 主要パッケージ
+
+| パッケージ | バージョン | 用途 |
+|-----------|-----------|------|
+| OllamaSharp | 5.4.8 | Ollama統合 |
+| OpenAI | 2.1.0 | ChatGPT統合 |
+| Google.Apis.Calendar.v3 | 1.69.0 | Googleカレンダー |
+| Google.Apis.Gmail.v1 | 1.69.0 | Gmail統合 |
+| HtmlAgilityPack | 1.11.72 | Webスクレイピング |
+| WpfAnimatedGif | 2.0.2 | GIFアニメーション |
+| System.Speech | 8.0.0 | 音声入出力 |
+| System.Drawing.Common | 8.0.0 | 画像処理 |
 
 ## セットアップ
 
@@ -119,7 +229,7 @@ AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピ�
    }
    ```
 
-### オプション2: ChatGPT（クラウド）
+### オプション2: ChatGPT（OpenAI）
 
 1. **APIキーの取得**
    - https://platform.openai.com/api-keys でAPIキーを作成
@@ -136,7 +246,45 @@ AiAssistantは、かつてのMicrosoft Office助手（Clippy）にインスピ�
        "Temperature": 0.7
      },
      "LocalLlm": {
-       "PreferLocal": false  // クラウド優先に変更
+       "PreferLocal": false
+     }
+   }
+   ```
+
+### オプション3: Claude（Anthropic）
+
+1. **APIキーの取得**
+   - https://console.anthropic.com/ でAPIキーを作成
+
+2. **設定ファイルの編集**
+
+   ```json
+   {
+     "Claude": {
+       "ApiKey": "sk-ant-your-api-key-here",
+       "Model": "claude-sonnet-4-20250514",
+       "MaxTokens": 2000,
+       "Temperature": 0.7
+     }
+   }
+   ```
+
+### オプション4: LM Studio（ローカルGUI）
+
+1. **LM Studioのインストール**
+   - https://lmstudio.ai/ からダウンロード
+   - モデルをダウンロードしてローカルサーバーを起動
+
+2. **設定ファイルの編集**
+
+   ```json
+   {
+     "LmStudio": {
+       "Enabled": true,
+       "Endpoint": "http://localhost:1234",
+       "Model": "local-model",
+       "MaxTokens": 2000,
+       "Temperature": 0.7
      }
    }
    ```
@@ -208,26 +356,82 @@ dotnet run --project AiAssistant/AiAssistant.csproj
 
 ```
 AiAssistant/
-├── AiAssistant/
-│   ├── MainWindow.xaml / .xaml.cs       # メインUIウィンドウ
-│   ├── AssistantViewModel.cs            # ViewModel（状態管理）
+├── AiAssistant/                         # メインプロジェクト
+│   ├── MainWindow.xaml/.cs              # メインUIウィンドウ
+│   ├── SettingsWindow.xaml/.cs          # 設定画面
+│   ├── InputDialog.xaml/.cs             # 入力ダイアログ
+│   ├── AssistantViewModel.cs            # メインViewModel
+│   │
+│   ├── # AIサービス
 │   ├── IAiService.cs                    # AIサービスインターフェース
+│   ├── AiServiceFactory.cs              # サービス選択ロジック
 │   ├── OllamaAiService.cs               # Ollama統合
 │   ├── ChatGptService.cs                # ChatGPT統合
+│   ├── ClaudeAiService.cs               # Claude統合
+│   ├── LmStudioAiService.cs             # LM Studio統合
 │   ├── MockAiService.cs                 # モックAI実装
-│   ├── AiServiceFactory.cs              # サービス選択ロジック
+│   │
+│   ├── # 生産性サービス
+│   ├── ICalendarService.cs              # カレンダーインターフェース
+│   ├── GoogleCalendarService.cs         # Googleカレンダー統合
+│   ├── IGmailService.cs                 # Gmailインターフェース
+│   ├── GmailService.cs                  # Gmail統合
+│   ├── GoogleCredentialHelper.cs        # Google認証ヘルパー
+│   ├── IWeatherService.cs               # 天気インターフェース
+│   ├── WeatherService.cs                # 天気情報取得
+│   ├── ICurrencyService.cs              # 為替インターフェース
+│   ├── CurrencyService.cs               # 為替レート取得
+│   ├── IFundService.cs                  # ファンドインターフェース
+│   ├── MufgFundService.cs               # MUFGファンド価格取得
+│   ├── IGitHubService.cs                # GitHubインターフェース
+│   ├── GitHubService.cs                 # GitHub統合
+│   ├── IClaudeUsageService.cs           # Claude使用量インターフェース
+│   ├── ClaudeUsageService.cs            # Claude使用量確認
+│   │
+│   ├── # コミュニケーションサービス
+│   ├── IStatusService.cs                # ステータスインターフェース
+│   ├── DiscordStatusService.cs          # Discordステータス更新
+│   ├── SlackStatusService.cs            # Slackステータス更新
+│   ├── ITranslationService.cs           # 翻訳インターフェース
+│   ├── TranslationService.cs            # AI翻訳サービス
+│   │
+│   ├── # ユーティリティサービス
+│   ├── PomodoroService.cs               # ポモドーロタイマー
+│   ├── DailyGoalsService.cs             # デイリーゴール管理
+│   ├── QuickNotesService.cs             # クイックノート
+│   ├── ClipboardHistoryService.cs       # クリップボード履歴
+│   ├── MediaControlService.cs           # メディアコントロール
+│   ├── ScreenshotOcrService.cs          # スクリーンショットOCR
+│   ├── MiniGameService.cs               # ミニゲーム
+│   │
+│   ├── # 音声サービス
+│   ├── VoiceInputService.cs             # 音声入力
+│   ├── VoiceOutputService.cs            # 音声出力
+│   │
+│   ├── # チャット関連
+│   ├── IChatHistoryService.cs           # チャット履歴インターフェース
+│   ├── ChatHistoryService.cs            # チャット履歴永続化
+│   ├── ChatBubbleStyle.cs               # チャットバブルスタイル
+│   ├── MarkdownTextBlockHelper.cs       # Markdown表示ヘルパー
+│   │
+│   ├── # アニメーション
 │   ├── CharacterAnimationController.cs  # アニメーション管理
 │   ├── ChromaKeyHelper.cs               # マゼンタ背景除去
-│   ├── AppSettings.cs                   # 設定管理
+│   │
+│   ├── # 設定・ユーティリティ
+│   ├── AppSettings.cs                   # 設定管理クラス
+│   ├── WindowInteropHelpers.cs          # Win32 API連携
 │   ├── appsettings.json                 # 設定ファイル
+│   │
 │   └── CharacterAnimations/             # アニメーションファイル
-│       ├── CatIdle01.webm
-│       ├── DragonIdle01.webm
-│       └── ... (全50個のアニメーション)
-├── Sci-Fi Boss pack/                    # Unity 3Dアセット（gitignore対象）
-├── OLLAMA_SETUP.md                      # Ollamaセットアップガイド
-├── OLLAMA_INTEGRATION_SUMMARY.md        # 実装詳細
-├── UNITY_ANIMATION_EXPORT_GUIDE.md      # Unity録画ガイド
+│       ├── CatIdle01.gif
+│       ├── DragonIdle01.gif
+│       └── ... (全54個のアニメーション)
+│
+├── Build/                               # ビルド出力
+├── Result.PNG                           # スクリーンショット
+├── Result2.PNG                          # スクリーンショット
+├── SETUP.md                             # セットアップガイド
 └── README.md                            # このファイル
 ```
 
@@ -351,40 +555,78 @@ ollama pull phi3:mini
 
 ## 開発状況
 
-### 完了 ✅
+### コア機能 ✅
 
-- [x] 基本的なフローティングウィンドウUI
+- [x] フローティングウィンドウUI（透明背景、最前面表示）
 - [x] MVVMアーキテクチャ
-- [x] Ollama統合（ローカルLLM）
-- [x] ChatGPT統合
-- [x] スマートサービス選択
-- [x] ストリーミングレスポンス
-- [x] チャットバルーンUI
-- [x] 送信中表示と送信ボタン無効化
 - [x] クリックスルーモード
+- [x] ダーク/ライトテーマ対応
 - [x] 設定ファイルシステム
-- [x] アニメーションキャラクター表示（6種類のペット）
-- [x] Unity Recorder連携（WebM録画）
+- [x] 設定UI（GUIベース）
+
+### AIサービス ✅
+
+- [x] Ollama統合（ローカルLLM）
+- [x] ChatGPT統合（OpenAI API）
+- [x] Claude統合（Anthropic API）
+- [x] LM Studio統合（ローカルAPI）
+- [x] スマートサービス選択（自動フォールバック）
+- [x] ストリーミングレスポンス
+- [x] 会話履歴の永続化
+
+### チャットUI ✅
+
+- [x] チャットバルーンUI
+- [x] Markdownフォーマット対応
+- [x] カスタマイズ可能なバブルスタイル
+- [x] 送信中表示と送信ボタン無効化
+
+### キャラクターアニメーション ✅
+
+- [x] 6種類のペット（Cat、Crab、Dragon、Frog、Shark、Snake）
+- [x] 54個のアニメーション
 - [x] マゼンタクロマキー自動除去
 - [x] ペット選択UI
-- [x] ランダムアニメーション切り替え
-- [x] ダークテーマ対応
+- [x] ランダムモード
+
+### 生産性機能 ✅
+
+- [x] Google Calendar統合
+- [x] Gmail統合
+- [x] 天気情報表示
+- [x] 為替レート表示
+- [x] ファンド価格チェック
+- [x] GitHub統合
+- [x] Claude使用量確認
+- [x] ポモドーロタイマー
+- [x] デイリーゴール
+- [x] クイックノート
+- [x] クリップボード履歴
+
+### コミュニケーション ✅
+
+- [x] Discord統合
+- [x] Slack統合
+- [x] AI翻訳サービス
+
+### 音声機能 ✅
+
+- [x] 音声入力（Windows Speech Recognition）
+- [x] 音声出力（テキスト読み上げ）
+
+### 教育機能 ✅
+
+- [x] 言語学習サポート（英語、日本語、韓国語）
+- [x] プログラミング学習（C#、Python、JavaScript等）
+- [x] コードレビュー・デバッグヘルプ
+- [x] アルゴリズム・設計パターン解説
 
 ### 計画中 🔄
 
-- [ ] 音声入力サポート
 - [ ] ペットごとの音声エフェクト
-
-### 追加実装済み ✅
-
-- [x] Google Calendar統合（複数カレンダー、週/月表示）
-- [x] Gmail統合（メール一覧、既読/未読切り替え）
-- [x] 天気情報表示
-- [x] ファンド価格チェック
-- [x] 為替レート（JPY/HKD/KRW）
-- [x] Claude使用量確認（組織API）
-- [x] 設定UI（GUIベース）
-- [x] 会話履歴の永続化
+- [ ] より多くのペットアニメーション
+- [ ] プラグインシステム
+- [ ] その他の言語サポート（中国語、スペイン語等）
 
 ## パフォーマンス
 
@@ -460,5 +702,5 @@ ext: webm, gif, png
 ---
 
 **作成日**: 2025-12-29
-**最終更新**: 2025-12-29
-**ステータス**: 実用可能（ローカルLLM、ChatGPT、キャラクターアニメーション統合済み）
+**最終更新**: 2026-01-10
+**ステータス**: 実用可能（Ollama、ChatGPT、Claude、LM Studio対応 / 多彩な統合機能搭載）
