@@ -1,0 +1,58 @@
+{
+  "id": "a6514e90-3fd0-4abe-a0b3-cbd9c40ed615",
+  "title": "sdf",
+  "createdAt": "2026-01-10T00:04:00.5447521+09:00",
+  "updatedAt": "2026-01-10T01:21:06.7104624+09:00",
+  "messages": [
+    {
+      "role": "user",
+      "content": "sdf",
+      "timestamp": "2026-01-10T00:04:00.54546+09:00"
+    },
+    {
+      "role": "assistant",
+      "content": "(mock streaming) Answer for: sdf. This is a simulated streaming response generated at 上午 12:04:00.",
+      "timestamp": "2026-01-10T00:04:01.7442034+09:00"
+    },
+    {
+      "role": "user",
+      "content": "d",
+      "timestamp": "2026-01-10T00:30:03.8149317+09:00"
+    },
+    {
+      "role": "assistant",
+      "content": "(mock streaming) Answer for: d. This is a simulated streaming response generated at 上午 12:30:03.",
+      "timestamp": "2026-01-10T00:30:05.1092587+09:00"
+    },
+    {
+      "role": "user",
+      "content": "fii",
+      "timestamp": "2026-01-10T00:56:34.0829335+09:00"
+    },
+    {
+      "role": "assistant",
+      "content": "(mock streaming) Answer for: fii. This is a simulated streaming response generated at 上午 12:56:34.",
+      "timestamp": "2026-01-10T00:56:35.2923637+09:00"
+    },
+    {
+      "role": "user",
+      "content": "目標; w",
+      "timestamp": "2026-01-10T01:18:43.5438464+09:00"
+    },
+    {
+      "role": "assistant",
+      "content": "(mock streaming) Answer for: 目標; w. This is a simulated streaming response generated at 上午 01:18:43.",
+      "timestamp": "2026-01-10T01:18:45.6519674+09:00"
+    },
+    {
+      "role": "user",
+      "content": "cxv",
+      "timestamp": "2026-01-10T01:21:05.4003135+09:00"
+    },
+    {
+      "role": "assistant",
+      "content": "(mock streaming) Answer for: cxv. This is a simulated streaming response generated at 上午 01:21:05.",
+      "timestamp": "2026-01-10T01:21:06.7104601+09:00"
+    }
+  ]
+}
