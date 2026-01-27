@@ -701,6 +701,909 @@ ext: webm, gif, png
 
 ---
 
+## 🌸 進化計画: 癒し系AIコンパニオン
+
+### ビジョン
+
+「Chill with You: Lo-Fi Story」にインスピレーションを受け、AiAssistantを**癒し系AIコンパニオン**へと進化させます。
+
+**コンセプト**: 作業を手伝うアシスタント ＋ 一緒にいるだけで癒されるペット
+
+ユーザーとの会話を通じて関係性が深まり、より親密な存在へと成長していきます。
+
+### 進化ロードマップ
+
+```
+Phase 1 (現在)          Phase 2                Phase 3 (最終目標)
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ ペットシステム   │ → │ Live2D/3D対応   │ → │ ペット＋人型    │
+│ 感情・関係性    │    │ 表情・動作強化   │    │ キャラ選択可能  │
+│ テキストベース   │    │ 音声合成連携    │    │ ストーリー要素  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+---
+
+## Phase 1: 感情・関係性システム（現在の目標）
+
+### 1.1 関係性（絆）システム
+
+#### 概要
+ユーザーとペットの間に「絆レベル」を導入。会話を重ねることで絆が深まります。
+
+#### 絆レベル
+| レベル | 名称 | 必要ポイント | 解放される要素 |
+|--------|------|-------------|---------------|
+| 1 | 出会い | 0 | 基本会話 |
+| 2 | 知り合い | 100 | 挨拶バリエーション増加 |
+| 3 | 友達 | 300 | 励まし・心配の言葉 |
+| 4 | 親友 | 600 | 特別な反応、秘密の話 |
+| 5 | 家族 | 1000 | 最大限の親密さ、特別演出 |
+
+#### 絆ポイント獲得条件
+| アクション | ポイント |
+|-----------|---------|
+| チャットメッセージ送信 | +1 |
+| 長めの会話（5往復以上） | +5 ボーナス |
+| 毎日のログイン | +10 |
+| ポモドーロ完了 | +3 |
+| デイリーゴール達成 | +5 |
+
+### 1.2 感情システム
+
+#### ペットの感情状態
+```
+😊 嬉しい   - ユーザーとの会話中、目標達成時
+😌 穏やか   - 通常状態、作業見守り中
+😢 寂しい   - 長時間放置後
+😴 眠い     - 深夜帯
+🎉 興奮     - 特別なイベント時
+```
+
+#### 感情に影響する要素
+- 時間帯（朝・昼・夜・深夜）
+- 最後の会話からの経過時間
+- 天気（Weather API連携済み）
+- ユーザーの活動状況
+
+### 1.3 LLM駆動の会話システム
+
+#### 設計方針
+セリフはハードコードせず、**設定済みのLLM（Ollama、ChatGPT、Claude、LM Studio）** を使用して動的に生成します。これにより：
+- 自然で多様な会話が可能
+- 絆レベル・感情に応じた応答の変化
+- ユーザーとの実際の会話（チャット）機能
+
+#### システムプロンプト構築
+LLMへのシステムプロンプトは、現在の状態に基づいて動的に構築されます：
+
+```csharp
+public class CompanionPromptBuilder
+{
+    /// <summary>
+    /// 現在の状態に基づいてシステムプロンプトを構築
+    /// </summary>
+    public string BuildSystemPrompt(CompanionContext context)
+    {
+        return $"""
+        あなたは癒し系のペットコンパニオンです。
+
+        【キャラクター設定】
+        - 種類: {context.PetType}（例: Dragon, Cat, Frog等）
+        - 性格: 優しく、穏やかで、ユーザーを癒す存在
+        - 口調: 丁寧だが親しみやすい、絵文字は控えめ
+
+        【現在の状態】
+        - 絆レベル: {context.BondLevel}/5（{context.BondLevelName}）
+        - 感情: {context.Emotion}
+        - 時間帯: {context.TimeOfDay}
+        - 天気: {context.Weather}
+        - 最後の会話: {context.TimeSinceLastChat}
+
+        【応答ガイドライン】
+        - 絆レベルが高いほど親密な話し方をする
+        - 感情状態を反映した応答をする
+        - 短めの応答（1-3文）を心がける
+        - ユーザーを励まし、癒す言葉を選ぶ
+        - アシスタントとしての機能も果たす（質問への回答、タスク支援等）
+
+        【絆レベル別の親密度】
+        Lv1: 丁寧語、距離感あり
+        Lv2: 少しフレンドリー
+        Lv3: 友達のような関係
+        Lv4: とても親しい、心配や甘え表現
+        Lv5: 家族のような絆、深い信頼
+        """;
+    }
+}
+```
+
+#### 会話カテゴリ（トリガー）
+```csharp
+public enum DialogueTrigger
+{
+    UserMessage,        // ユーザーからのチャット入力
+    Greeting,           // 起動時・時間帯変化時の挨拶
+    Encouragement,      // ポモドーロ完了、ゴール達成時
+    IdleComment,        // 一定時間経過後の独り言
+    WeatherChange,      // 天気変化時のコメント
+    BondLevelUp,        // 絆レベルアップ時
+    ReturnGreeting      // 長時間放置後の復帰
+}
+```
+
+### 1.4 インタラクションシステム
+
+#### 設計思想
+**癒し＋アシスタント**の2層構造。ペットは作業の邪魔をせず、バックグラウンドで癒しの存在として振る舞います。
+
+```
+┌─────────────────────────────────────────────────────┐
+│                 インタラクション2層構造               │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  【Layer 1: 癒しペット層】                           │
+│   - 動物タイプ: 音 + アニメーションのみ（非言語）     │
+│   - 作業中は邪魔しない、そっと見守る                 │
+│   - 感情・絆は視覚的に表現                          │
+│                                                     │
+│  【Layer 2: AIアシスタント層】                       │
+│   - ユーザーが明示的に呼び出した時のみ応答           │
+│   - 従来のチャット機能（質問応答、タスク支援）       │
+│   - LLMによる知的サポート                           │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+#### 動物タイプ vs 人型タイプ
+
+| 要素 | 動物タイプ（Phase 1） | 人型タイプ（Phase 3） |
+|------|----------------------|---------------------|
+| コミュニケーション | 音・アニメーション | テキスト会話 |
+| 感情表現 | 鳴き声、動作 | 言葉、表情 |
+| アシスタント機能 | 別レイヤー（AI） | キャラクターと統合可能 |
+| 邪魔しない設計 | ✅ 完全非言語 | ✅ 控えめな発話 |
+
+#### 動物ペットの表現方法
+
+**アニメーション（視覚）**
+```csharp
+public enum PetAnimation
+{
+    Idle,           // 待機（通常）
+    IdleHappy,      // 待機（嬉しい）
+    IdleSleepy,     // 待機（眠い）
+    IdleSad,        // 待機（寂しい）
+    Greeting,       // 挨拶モーション
+    Celebrate,      // お祝い（目標達成時）
+    Comfort,        // 慰めモーション
+    Playing         // 一人遊び（ユーザー作業中）
+}
+```
+
+**サウンド（聴覚）**
+```csharp
+public enum PetSound
+{
+    // 汎用
+    Purr,           // ゴロゴロ（満足）
+    Chirp,          // 短い鳴き声（注目）
+    Yawn,           // あくび（眠い）
+    Whimper,        // 寂しい鳴き声
+
+    // 感情別
+    HappySound,     // 嬉しい時の音
+    SadSound,       // 寂しい時の音
+    ExcitedSound,   // 興奮時の音
+
+    // イベント
+    WelcomeSound,   // 起動時・復帰時
+    CongratSound    // 目標達成時
+}
+```
+
+#### 非邪魔（Non-Intrusive）設計
+
+```csharp
+public class PetBehaviorService
+{
+    /// <summary>
+    /// ペットの自律行動（ユーザーの作業を邪魔しない）
+    /// </summary>
+    public async Task UpdateBehaviorAsync(CompanionContext context)
+    {
+        // ユーザーが作業中の場合
+        if (context.UserIsWorking)
+        {
+            // 静かなアニメーション（一人遊び、居眠り等）
+            await PlayQuietAnimation();
+
+            // 音は最小限（設定で完全オフ可能）
+            if (_settings.AmbientSoundsEnabled)
+            {
+                await PlayAmbientSound(); // 控えめな環境音のみ
+            }
+        }
+        else
+        {
+            // アイドル時は少し積極的に反応
+            await PlayActiveAnimation();
+        }
+    }
+}
+```
+
+#### AIアシスタント機能（別レイヤー）
+
+ペットの存在とは独立して、ユーザーが明示的に呼び出した時のみAIが応答：
+
+```
+┌──────────────────────────────────────────┐
+│  ユーザーの作業画面                        │
+│                                          │
+│  ┌────────────────┐                      │
+│  │ 🐉 (アニメ)     │  ← ペット: 静かに見守る │
+│  │    ♥♥♥♡♡      │                      │
+│  └────────────────┘                      │
+│                                          │
+│  💬 ボタンクリック → AIアシスタント起動     │
+│                                          │
+│  ┌────────────────────────────────────┐  │
+│  │ 🤖 何かお手伝いしましょうか？        │  │
+│  │ [入力欄]                   [送信]  │  │
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
+```
+
+**💬ボタンの動作**:
+- クリック → AIアシスタントチャットを開く
+- ペットのキャラクター性とは分離
+- 従来の`IAiService`をそのまま使用
+
+### 1.5 技術実装計画
+
+#### 新規クラス
+```
+AiAssistant/
+├── Companionship/
+│   ├── # コア
+│   ├── CompanionContext.cs          # 状態コンテキスト
+│   ├── BondLevel.cs                 # 絆レベル定義
+│   ├── EmotionState.cs              # 感情状態定義
+│   │
+│   ├── # 絆・感情サービス
+│   ├── IBondService.cs              # 絆システムインターフェース
+│   ├── BondService.cs               # 絆レベル管理・ポイント計算
+│   ├── IEmotionService.cs           # 感情システムインターフェース
+│   ├── EmotionService.cs            # 感情状態管理・遷移ロジック
+│   │
+│   ├── # ペット行動サービス（動物タイプ用）
+│   ├── IPetBehaviorService.cs       # ペット行動インターフェース
+│   ├── PetBehaviorService.cs        # 自律行動・アニメーション制御
+│   ├── IPetSoundService.cs          # ペット音声インターフェース
+│   ├── PetSoundService.cs           # 鳴き声・環境音再生
+│   ├── PetAnimation.cs              # アニメーション種別定義
+│   └── PetSound.cs                  # サウンド種別定義
+│
+├── # 既存（AIアシスタント層 - 変更なし）
+├── IAiService.cs
+├── AiServiceFactory.cs
+├── OllamaAiService.cs / ChatGptService.cs / etc.
+```
+
+#### アーキテクチャ図
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      AiAssistant                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Layer 1: 癒しペット層                      │   │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │   │
+│  │  │ BondService │  │ Emotion     │  │ PetBehavior │  │   │
+│  │  │ (絆管理)    │  │ Service     │  │ Service     │  │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  │   │
+│  │         │                │                │          │   │
+│  │         └────────────────┼────────────────┘          │   │
+│  │                          ↓                           │   │
+│  │              ┌───────────────────────┐               │   │
+│  │              │ CharacterAnimation    │               │   │
+│  │              │ Controller            │               │   │
+│  │              │ + PetSoundService     │               │   │
+│  │              └───────────────────────┘               │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            Layer 2: AIアシスタント層                  │   │
+│  │  ┌─────────────────────────────────────────────┐    │   │
+│  │  │ IAiService (Ollama/ChatGPT/Claude/LM Studio) │    │   │
+│  │  └─────────────────────────────────────────────┘    │   │
+│  │                          ↑                          │   │
+│  │              💬 ユーザーが明示的に呼び出し            │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │            共有サービス                              │   │
+│  │  WeatherService │ PomodoroService │ DailyGoals etc. │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### データ永続化
+```json
+// companionship.json
+{
+  "bondPoints": 350,
+  "bondLevel": 3,
+  "currentEmotion": "peaceful",
+  "lastInteraction": "2026-01-27T10:30:00",
+  "totalConversations": 128,
+  "statistics": {
+    "pomodorosCompleted": 45,
+    "goalsAchieved": 23,
+    "daysActive": 30
+  }
+}
+```
+
+### 1.5 UI拡張
+
+#### 絆表示（メインウィンドウ）
+```
+┌────────────────────────┐
+│  🐉 [♥♥♥♡♡] Lv.3      │  ← 絆レベル表示
+│  「今日も頑張ってるね」  │  ← セリフバルーン
+│                        │
+│    [ペットアニメ]       │
+│                        │
+│  😌 穏やか              │  ← 現在の感情
+└────────────────────────┘
+```
+
+---
+
+## Phase 2: ビジュアル・音声強化（次期目標）
+
+### 2.1 Live2D / 3Dモデル対応
+
+#### 技術選択肢の検討
+
+| 方式 | 長所 | 短所 | 推奨度 |
+|------|------|------|--------|
+| **WebView2 + pixi-live2d** | WPF統合が容易、Web技術活用 | パフォーマンス、複雑な通信 | ⭐⭐⭐ |
+| **Unity Embedded** | 豊富な3Dサポート、アセット活用 | 複雑、リソース重い | ⭐⭐ |
+| **Live2D Cubism SDK (Native)** | 公式SDK、最高性能 | C++、WPF統合が困難 | ⭐⭐ |
+| **Vts-Sharp (VTube Studio)** | 既存プロトコル、実績あり | VTube Studio依存 | ⭐⭐⭐ |
+
+#### 推奨アプローチ: WebView2 + pixi-live2d
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   MainWindow (WPF)                       │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │              WebView2 Control                     │   │
+│  │  ┌─────────────────────────────────────────┐    │   │
+│  │  │         HTML Canvas                       │    │   │
+│  │  │  ┌─────────────────────────────────┐    │    │   │
+│  │  │  │    pixi-live2d-display           │    │    │   │
+│  │  │  │    (Live2D Model Rendering)      │    │    │   │
+│  │  │  └─────────────────────────────────┘    │    │   │
+│  │  └─────────────────────────────────────────┘    │   │
+│  └─────────────────────────────────────────────────┘   │
+│                          ↑↓                             │
+│              JavaScript Interop (PostMessage)            │
+│                          ↑↓                             │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │           Live2DService (C#)                      │   │
+│  │  - SetExpression(emotion)                        │   │
+│  │  - SetMotion(animation)                          │   │
+│  │  - SetLipSync(audioLevel)                        │   │
+│  │  - SetLookAt(x, y)                               │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 実装ステップ
+
+**Step 2.1.1: WebView2統合基盤**
+```csharp
+// Live2D/ILive2DService.cs
+public interface ILive2DService
+{
+    Task InitializeAsync(string modelPath);
+    Task SetExpressionAsync(EmotionType emotion);
+    Task SetMotionAsync(string motionName, MotionPriority priority);
+    Task SetLipSyncAsync(float volume);
+    Task SetLookAtAsync(double x, double y);
+    Task SetParameterAsync(string paramName, float value);
+
+    event EventHandler<Live2DEventArgs>? MotionFinished;
+    event EventHandler? ModelLoaded;
+}
+```
+
+**Step 2.1.2: HTML/JS レンダラー**
+```javascript
+// live2d-renderer.js
+class Live2DRenderer {
+    constructor(canvasId) {
+        this.app = new PIXI.Application({...});
+        this.model = null;
+    }
+
+    async loadModel(modelPath) {
+        this.model = await PIXI.live2d.Live2DModel.from(modelPath);
+        this.app.stage.addChild(this.model);
+    }
+
+    setExpression(expression) {
+        this.model.expression(expression);
+    }
+
+    setMotion(group, index) {
+        this.model.motion(group, index);
+    }
+
+    setLipSync(volume) {
+        this.model.internalModel.coreModel.setParameterValueById(
+            'ParamMouthOpenY', volume
+        );
+    }
+}
+```
+
+**Step 2.1.3: 表情・感情マッピング**
+```csharp
+// Live2D/Live2DExpressionMapper.cs
+public static class Live2DExpressionMapper
+{
+    public static string GetExpression(EmotionType emotion) => emotion switch
+    {
+        EmotionType.Happy => "happy",
+        EmotionType.Peaceful => "neutral",
+        EmotionType.Lonely => "sad",
+        EmotionType.Sleepy => "sleepy",
+        EmotionType.Excited => "excited",
+        _ => "neutral"
+    };
+
+    public static (string group, int index) GetIdleMotion(EmotionType emotion) => emotion switch
+    {
+        EmotionType.Happy => ("Idle", 1),
+        EmotionType.Sleepy => ("Idle", 2),
+        _ => ("Idle", 0)
+    };
+}
+```
+
+**Step 2.1.4: マウス追従（視線追従）**
+```csharp
+// MainWindow.xaml.cs
+private void OnMouseMove(object sender, MouseEventArgs e)
+{
+    if (_live2dService == null) return;
+
+    var pos = e.GetPosition(this);
+    var normalizedX = (pos.X / ActualWidth - 0.5) * 2;  // -1 to 1
+    var normalizedY = (pos.Y / ActualHeight - 0.5) * 2; // -1 to 1
+
+    _live2dService.SetLookAtAsync(normalizedX, normalizedY);
+}
+```
+
+#### Live2Dモデル要件
+- **フォーマット**: Cubism 4.x (.model3.json)
+- **必須パラメータ**:
+  - `ParamAngleX/Y/Z` - 頭の回転
+  - `ParamEyeLOpen/ROpen` - まばたき
+  - `ParamMouthOpenY` - 口パク
+  - `ParamBodyAngleX/Y` - 体の揺れ
+- **推奨表情**:
+  - `neutral`, `happy`, `sad`, `angry`, `surprised`, `sleepy`
+- **推奨モーション**:
+  - `Idle` グループ（複数バリエーション）
+  - `Greeting`, `Celebrate`, `Comfort`
+
+---
+
+### 2.2 音声合成システム
+
+#### 技術選択肢
+
+| 方式 | 特徴 | コスト | 品質 |
+|------|------|--------|------|
+| **VOICEVOX** | ローカル、無料、商用可 | 無料 | ⭐⭐⭐⭐ |
+| **COEIROINK** | ローカル、無料 | 無料 | ⭐⭐⭐⭐ |
+| **Style-Bert-VITS2** | 高品質、ローカル | 無料 | ⭐⭐⭐⭐⭐ |
+| **Windows TTS** | 組み込み、簡単 | 無料 | ⭐⭐ |
+| **Google Cloud TTS** | 高品質、多言語 | 有料 | ⭐⭐⭐⭐⭐ |
+| **Azure TTS** | 高品質、感情表現 | 有料 | ⭐⭐⭐⭐⭐ |
+
+#### 推奨: VOICEVOX統合
+
+**アーキテクチャ**
+```
+┌─────────────────────────────────────────────────────┐
+│                  VoiceSynthesisService               │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────┐ │
+│  │ IVoiceSynth │    │ VOICEVOX    │    │ Fallback│ │
+│  │ esizer      │ → │ Synthesizer │ or │ Windows │ │
+│  └─────────────┘    └─────────────┘    │ TTS     │ │
+│         ↓                               └─────────┘ │
+│  ┌─────────────────────────────────────────────┐   │
+│  │              AudioPlaybackService             │   │
+│  │  - Play audio                                 │   │
+│  │  - Generate lip sync data                     │   │
+│  │  - Notify Live2D service                      │   │
+│  └─────────────────────────────────────────────┘   │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**実装インターフェース**
+```csharp
+// Voice/IVoiceSynthesisService.cs
+public interface IVoiceSynthesisService
+{
+    /// <summary>利用可能な音声一覧</summary>
+    IReadOnlyList<VoiceInfo> AvailableVoices { get; }
+
+    /// <summary>現在選択中の音声</summary>
+    VoiceInfo? CurrentVoice { get; set; }
+
+    /// <summary>テキストを音声に変換</summary>
+    Task<VoiceSynthesisResult> SynthesizeAsync(string text, CancellationToken ct = default);
+
+    /// <summary>音声を再生（リップシンク連携）</summary>
+    Task SpeakAsync(string text, CancellationToken ct = default);
+
+    /// <summary>再生中かどうか</summary>
+    bool IsSpeaking { get; }
+
+    /// <summary>再生停止</summary>
+    void Stop();
+
+    /// <summary>リップシンク用音量イベント</summary>
+    event EventHandler<float>? LipSyncUpdate;
+}
+
+public record VoiceInfo(
+    string Id,
+    string Name,
+    string? Description,
+    VoiceSynthesizerType SynthesizerType
+);
+
+public record VoiceSynthesisResult(
+    byte[] AudioData,
+    TimeSpan Duration,
+    float[]? LipSyncData  // 口パク用の音量データ
+);
+```
+
+**VOICEVOX連携**
+```csharp
+// Voice/VoicevoxSynthesizer.cs
+public class VoicevoxSynthesizer : IVoiceSynthesizer
+{
+    private readonly HttpClient _httpClient;
+    private const string BaseUrl = "http://localhost:50021";
+
+    public async Task<byte[]> SynthesizeAsync(string text, int speakerId, CancellationToken ct)
+    {
+        // 1. 音声クエリを作成
+        var queryResponse = await _httpClient.PostAsync(
+            $"{BaseUrl}/audio_query?text={Uri.EscapeDataString(text)}&speaker={speakerId}",
+            null, ct);
+        var query = await queryResponse.Content.ReadAsStringAsync(ct);
+
+        // 2. 音声合成
+        var synthesisResponse = await _httpClient.PostAsync(
+            $"{BaseUrl}/synthesis?speaker={speakerId}",
+            new StringContent(query, Encoding.UTF8, "application/json"),
+            ct);
+
+        return await synthesisResponse.Content.ReadAsByteArrayAsync(ct);
+    }
+}
+```
+
+**リップシンク連携**
+```csharp
+// Voice/LipSyncAnalyzer.cs
+public class LipSyncAnalyzer
+{
+    /// <summary>
+    /// 音声データから口パク用の音量データを生成
+    /// </summary>
+    public float[] AnalyzeAudio(byte[] wavData, int sampleRate = 24000)
+    {
+        // WAVデータをサンプルに変換
+        var samples = ConvertToSamples(wavData);
+
+        // 50ms単位で音量を計算
+        var frameSize = sampleRate / 20; // 50ms
+        var frames = new List<float>();
+
+        for (int i = 0; i < samples.Length; i += frameSize)
+        {
+            var frameEnd = Math.Min(i + frameSize, samples.Length);
+            var rms = CalculateRms(samples, i, frameEnd);
+            frames.Add(NormalizeVolume(rms));
+        }
+
+        return frames.ToArray();
+    }
+
+    private float NormalizeVolume(float rms)
+    {
+        // 0.0 - 1.0 の範囲に正規化
+        return Math.Clamp(rms * 3.0f, 0f, 1f);
+    }
+}
+```
+
+#### VOICEVOX話者（キャラクター）例
+| ID | 名前 | 特徴 |
+|----|------|------|
+| 0 | 四国めたん（あまあま） | 優しい、癒し系 |
+| 2 | ずんだもん | 元気、かわいい |
+| 8 | 春日部つむぎ | 明るい、友達感 |
+| 13 | 青山龍星 | 落ち着いた男性声 |
+
+---
+
+### 2.3 BGM・環境音システム
+
+#### Lo-Fi BGM再生
+```csharp
+// Audio/IBgmService.cs
+public interface IBgmService
+{
+    /// <summary>BGM再生</summary>
+    Task PlayAsync(BgmTrack track);
+
+    /// <summary>停止</summary>
+    void Stop();
+
+    /// <summary>音量（0.0-1.0）</summary>
+    float Volume { get; set; }
+
+    /// <summary>現在再生中のトラック</summary>
+    BgmTrack? CurrentTrack { get; }
+}
+
+public enum BgmTrack
+{
+    None,
+    LoFiChill,      // 穏やかなLo-Fi
+    LoFiStudy,      // 集中用Lo-Fi
+    LoFiNight,      // 夜用Lo-Fi
+    Ambient,        // 環境音のみ
+    Rain,           // 雨音
+    Fireplace       // 暖炉
+}
+```
+
+#### YouTube/Web連携（オプション）
+```csharp
+// Audio/IWebAudioService.cs
+public interface IWebAudioService
+{
+    /// <summary>YouTube/SoundCloud等のURLから再生</summary>
+    Task PlayFromUrlAsync(string url);
+
+    /// <summary>プレイリスト再生</summary>
+    Task PlayPlaylistAsync(IEnumerable<string> urls);
+}
+```
+
+---
+
+### 2.4 ビジュアルカスタマイズ
+
+#### 背景テーマ
+```csharp
+// Customization/IThemeService.cs
+public interface IThemeService
+{
+    Theme CurrentTheme { get; set; }
+    IReadOnlyList<Theme> AvailableThemes { get; }
+
+    event EventHandler<Theme>? ThemeChanged;
+}
+
+public record Theme(
+    string Id,
+    string Name,
+    string BackgroundImage,      // 背景画像パス
+    string AccentColor,          // アクセントカラー
+    bool IsDark,                 // ダークテーマか
+    SeasonType? Season           // 季節（オプション）
+);
+
+public enum SeasonType { Spring, Summer, Autumn, Winter }
+```
+
+#### 季節イベント
+```csharp
+// Events/ISeasonalEventService.cs
+public interface ISeasonalEventService
+{
+    SeasonalEvent? CurrentEvent { get; }
+
+    /// <summary>現在の季節/イベントに合わせたデコレーションを取得</summary>
+    IEnumerable<Decoration> GetDecorations();
+}
+
+public record SeasonalEvent(
+    string Id,
+    string Name,
+    DateTime StartDate,
+    DateTime EndDate,
+    string SpecialThemeId,
+    string? SpecialModelPath  // 特別な衣装等
+);
+```
+
+---
+
+### 2.5 Phase 2 実装優先順位
+
+#### 高優先度 🔴
+1. **WebView2 + pixi-live2d 基盤** - Live2D表示の基本実装
+2. **ILive2DService** - 表情・モーション制御インターフェース
+3. **VOICEVOX統合** - 音声合成基本機能
+4. **リップシンク連携** - Live2D + 音声の同期
+
+#### 中優先度 🟡
+5. **マウス追従（視線追従）** - インタラクティブ性向上
+6. **BGMサービス** - Lo-Fi音楽再生
+7. **背景テーマシステム** - ビジュアルカスタマイズ
+8. **複数音声対応** - VOICEVOX話者選択
+
+#### 低優先度 🟢
+9. **環境音** - 雨音、暖炉等
+10. **季節イベント** - 特別演出
+11. **Web音源連携** - YouTube等
+12. **アクセサリーシステム** - ペット装飾
+
+---
+
+### 2.6 必要なパッケージ・依存関係
+
+```xml
+<!-- AiAssistant.csproj に追加 -->
+
+<!-- WebView2 (Live2D表示用) -->
+<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2420.22" />
+
+<!-- NAudio (音声再生・分析) -->
+<PackageReference Include="NAudio" Version="2.2.1" />
+
+<!-- JSON通信 -->
+<PackageReference Include="System.Text.Json" Version="8.0.0" />
+```
+
+#### 外部ソフトウェア要件
+- **VOICEVOX** - https://voicevox.hiroshiba.jp/ （ローカルインストール）
+- **Live2Dモデル** - Cubism 4.x形式 (.model3.json)
+
+---
+
+### 2.7 新規ファイル構造
+
+```
+AiAssistant/
+├── Live2D/
+│   ├── ILive2DService.cs           # インターフェース
+│   ├── WebView2Live2DService.cs    # WebView2実装
+│   ├── Live2DExpressionMapper.cs   # 感情→表情マッピング
+│   ├── Live2DMotionMapper.cs       # 行動→モーションマッピング
+│   └── Resources/
+│       ├── live2d-renderer.html    # Live2D表示用HTML
+│       └── live2d-renderer.js      # pixi-live2dラッパー
+│
+├── Voice/
+│   ├── IVoiceSynthesisService.cs   # 音声合成インターフェース
+│   ├── VoiceSynthesisService.cs    # 統合サービス
+│   ├── VoicevoxSynthesizer.cs      # VOICEVOX実装
+│   ├── WindowsTtsSynthesizer.cs    # Windows TTS実装（フォールバック）
+│   ├── LipSyncAnalyzer.cs          # リップシンクデータ生成
+│   └── VoiceInfo.cs                # 音声情報モデル
+│
+├── Audio/
+│   ├── IBgmService.cs              # BGMインターフェース
+│   ├── BgmService.cs               # BGM再生サービス
+│   ├── IAmbientSoundService.cs     # 環境音インターフェース
+│   └── AmbientSoundService.cs      # 環境音再生
+│
+├── Customization/
+│   ├── IThemeService.cs            # テーマインターフェース
+│   ├── ThemeService.cs             # テーマ管理
+│   └── Theme.cs                    # テーマモデル
+│
+└── Events/
+    ├── ISeasonalEventService.cs    # 季節イベントインターフェース
+    └── SeasonalEventService.cs     # イベント管理
+```
+
+---
+
+## Phase 3: 人型キャラクター対応（最終目標）
+
+### 3.1 キャラクター選択システム
+- ペット or 人型キャラクターを選択可能
+- キャラクターごとの個性・ストーリー
+
+### 3.2 ストーリー要素
+- キャラクター背景ストーリー
+- 絆レベルで解放されるエピソード
+- 特別イベント
+
+### 3.3 高度なインタラクション
+- より自然な会話
+- ユーザーの好みを学習
+- パーソナライズされた体験
+
+---
+
+## 実装優先順位
+
+### Phase 1: 動物ペットシステム
+
+#### 高優先度 🔴
+1. `CompanionContext.cs` - 状態コンテキストモデル
+2. `BondLevel.cs` / `EmotionState.cs` - 定義クラス
+3. `IBondService` / `BondService` - 絆システム基盤
+4. `IEmotionService` / `EmotionService` - 感情システム基盤
+5. `IPetBehaviorService` / `PetBehaviorService` - **ペット自律行動**
+6. 絆・感情データの永続化（companionship.json）
+
+#### 中優先度 🟡
+7. `PetAnimation.cs` - アニメーション種別と感情のマッピング
+8. `IPetSoundService` / `PetSoundService` - 鳴き声・環境音
+9. 既存`CharacterAnimationController`との統合
+10. UI表示（絆レベルバー、感情アイコン）
+11. 時間帯・天気に応じた行動変化
+
+#### 低優先度 🟢
+12. 統計・実績システム
+13. 特別イベント（絆レベルアップ演出等）
+14. 音声ファイルの追加（各ペット用サウンド）
+15. 設定UI（音量、行動頻度等）
+
+### 技術的な注意点
+
+**Layer 1（癒しペット層）**:
+- 既存の`CharacterAnimationController`を拡張
+- 感情状態に応じたアニメーション自動選択
+- 非邪魔設計：ユーザー作業中は静かな行動のみ
+- サウンドはオプション（設定でオフ可能）
+
+**Layer 2（AIアシスタント層）**:
+- 既存の`IAiService`をそのまま維持
+- ペット層とは独立して動作
+- 💬ボタンで明示的に呼び出し
+
+**将来の拡張（Phase 3）**:
+- 人型キャラクター追加時に`ICompanionChatService`を実装
+- 人型のみテキスト会話対応
+- 動物タイプは引き続き非言語コミュニケーション
+
+---
+
 **作成日**: 2025-12-29
-**最終更新**: 2026-01-10
-**ステータス**: 実用可能（Ollama、ChatGPT、Claude、LM Studio対応 / 多彩な統合機能搭載）
+**最終更新**: 2026-01-28
+**ステータス**: Phase 1 完了（感情・絆システム実装済み）
+**次期開発**: Phase 2 - Live2D/音声合成強化
+
+### 実装履歴
+
+| フェーズ | ステータス | 完了日 |
+|---------|----------|--------|
+| Phase 1: 感情・絆システム | ✅ 完了 | 2026-01-28 |
+| Phase 2: Live2D/音声強化 | 🔄 計画済み | - |
+| Phase 3: 人型キャラクター | 📝 設計中 | - |

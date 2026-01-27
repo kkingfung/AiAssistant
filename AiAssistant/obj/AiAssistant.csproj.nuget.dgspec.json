@@ -58,6 +58,14 @@
               "target": "Package",
               "version": "[1.11.72, )"
             },
+            "Microsoft.Web.WebView2": {
+              "target": "Package",
+              "version": "[1.0.2903.40, )"
+            },
+            "NAudio": {
+              "target": "Package",
+              "version": "[2.2.1, )"
+            },
             "OllamaSharp": {
               "target": "Package",
               "version": "[5.4.8, )"

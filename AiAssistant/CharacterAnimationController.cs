@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WpfAnimatedGif;
+using AiAssistant.Companionship;
 
 namespace AiAssistant
 {
@@ -27,10 +28,33 @@ namespace AiAssistant
         private int _currentAnimationIndex = 0;
         private string _selectedPetType = "Dragon";
 
+        // 感情別アニメーションのマッピング
+        private Dictionary<string, List<string>> _animationsByCategory = new();
+        private EmotionType _currentEmotion = EmotionType.Peaceful;
+        private bool _emotionBasedMode = false;
+
         /// <summary>
         /// アニメーション切り替え間隔（ミリ秒）
         /// </summary>
         public int SwitchIntervalMs { get; set; } = 15000; // 15秒ごと
+
+        /// <summary>
+        /// 現在の感情状態
+        /// </summary>
+        public EmotionType CurrentEmotion => _currentEmotion;
+
+        /// <summary>
+        /// 感情ベースモードが有効かどうか
+        /// </summary>
+        public bool EmotionBasedMode
+        {
+            get => _emotionBasedMode;
+            set
+            {
+                _emotionBasedMode = value;
+                Console.WriteLine($"[CharacterAnim] 感情ベースモード: {(value ? "有効" : "無効")}");
+            }
+        }
 
         /// <summary>
         /// コンストラクタ
@@ -83,6 +107,57 @@ namespace AiAssistant
                 Interval = TimeSpan.FromMilliseconds(SwitchIntervalMs)
             };
             _switchTimer.Tick += OnSwitchTimerTick;
+
+            // アニメーションをカテゴリ別に分類
+            CategorizeAnimations();
+        }
+
+        /// <summary>
+        /// アニメーションをカテゴリ別に分類します
+        /// 命名規則: {PetType}{Category}{Number}.{ext} (例: DragonIdle01.gif, CatHappy02.gif)
+        /// </summary>
+        private void CategorizeAnimations()
+        {
+            _animationsByCategory = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Idle", new List<string>() },
+                { "Happy", new List<string>() },
+                { "Sad", new List<string>() },
+                { "Sleepy", new List<string>() },
+                { "Excited", new List<string>() },
+                { "Flying", new List<string>() },
+                { "Roar", new List<string>() },
+                { "Other", new List<string>() }
+            };
+
+            foreach (var path in _animationPaths)
+            {
+                var fileName = Path.GetFileNameWithoutExtension(path);
+                var categorized = false;
+
+                foreach (var category in _animationsByCategory.Keys.ToList())
+                {
+                    if (category == "Other") continue;
+
+                    if (fileName.Contains(category, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _animationsByCategory[category].Add(path);
+                        categorized = true;
+                        break;
+                    }
+                }
+
+                if (!categorized)
+                {
+                    _animationsByCategory["Other"].Add(path);
+                }
+            }
+
+            // カテゴリ分類結果をログ出力
+            foreach (var kvp in _animationsByCategory.Where(x => x.Value.Count > 0))
+            {
+                Console.WriteLine($"[CharacterAnim] カテゴリ '{kvp.Key}': {kvp.Value.Count}個");
+            }
         }
 
         /// <summary>
@@ -112,6 +187,89 @@ namespace AiAssistant
             _switchTimer.Stop();
             _cancellationTokenSource?.Cancel();
             Console.WriteLine("[CharacterAnim] アニメーション再生停止");
+        }
+
+        /// <summary>
+        /// 感情を設定し、対応するアニメーションを再生します
+        /// </summary>
+        /// <param name="emotion">設定する感情</param>
+        public void SetEmotion(EmotionType emotion)
+        {
+            if (_currentEmotion == emotion && _emotionBasedMode)
+            {
+                return; // 同じ感情の場合はスキップ
+            }
+
+            _currentEmotion = emotion;
+            Console.WriteLine($"[CharacterAnim] 感情設定: {emotion}");
+
+            if (_emotionBasedMode)
+            {
+                LoadEmotionBasedAnimation(emotion);
+            }
+        }
+
+        /// <summary>
+        /// 感情に基づいたアニメーションを読み込みます
+        /// </summary>
+        private void LoadEmotionBasedAnimation(EmotionType emotion)
+        {
+            var category = GetCategoryForEmotion(emotion);
+            var animations = GetAnimationsForCategory(category);
+
+            if (animations.Count > 0)
+            {
+                var randomIndex = _random.Next(animations.Count);
+                LoadAnimation(animations[randomIndex]);
+                Console.WriteLine($"[CharacterAnim] 感情アニメーション再生: {emotion} -> {category}");
+            }
+            else
+            {
+                // フォールバック：通常のランダムアニメーション
+                LoadRandomAnimation();
+            }
+        }
+
+        /// <summary>
+        /// 感情からアニメーションカテゴリを取得します
+        /// </summary>
+        private static string GetCategoryForEmotion(EmotionType emotion)
+        {
+            return emotion switch
+            {
+                EmotionType.Happy => "Happy",
+                EmotionType.Peaceful => "Idle",
+                EmotionType.Lonely => "Sad",
+                EmotionType.Sleepy => "Sleepy",
+                EmotionType.Excited => "Excited",
+                _ => "Idle"
+            };
+        }
+
+        /// <summary>
+        /// カテゴリに対応するアニメーションリストを取得します
+        /// 見つからない場合はフォールバックカテゴリを使用
+        /// </summary>
+        private List<string> GetAnimationsForCategory(string category)
+        {
+            // 指定カテゴリにアニメーションがあればそれを返す
+            if (_animationsByCategory.TryGetValue(category, out var animations) && animations.Count > 0)
+            {
+                return animations;
+            }
+
+            // フォールバック: Idle -> Other -> 全アニメーション
+            if (_animationsByCategory.TryGetValue("Idle", out var idleAnimations) && idleAnimations.Count > 0)
+            {
+                return idleAnimations;
+            }
+
+            if (_animationsByCategory.TryGetValue("Other", out var otherAnimations) && otherAnimations.Count > 0)
+            {
+                return otherAnimations;
+            }
+
+            return _animationPaths;
         }
 
         /// <summary>
@@ -204,7 +362,16 @@ namespace AiAssistant
         /// </summary>
         private void OnSwitchTimerTick(object? sender, EventArgs e)
         {
-            LoadRandomAnimation();
+            if (_emotionBasedMode)
+            {
+                // 感情ベースモード：同じカテゴリ内でランダムに切り替え
+                LoadEmotionBasedAnimation(_currentEmotion);
+            }
+            else
+            {
+                // 通常モード：全アニメーションからランダム
+                LoadRandomAnimation();
+            }
         }
 
         public void Dispose()

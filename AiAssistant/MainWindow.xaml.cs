@@ -12,6 +12,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Documents;
 using WpfAnimatedGif;
+using AiAssistant.Companionship;
 
 namespace AiAssistant
 {
@@ -51,6 +52,29 @@ namespace AiAssistant
         private DailyGoalsService? _dailyGoalsService;
         private ScreenshotOcrService? _screenshotService;
         private IEducationService? _educationService;
+
+        // コンパニオンシップシステム（癒しペット機能）
+        private CompanionshipManager? _companionshipManager;
+
+        // Phase 3: キャラクター対話システム
+        private Character.ICharacterDialogueService? _dialogueService;
+        private System.Timers.Timer? _dialogueDismissTimer;
+
+
+        // Phase 2: Live2D/音声サービス
+        private Live2D.ILive2DService? _live2dService;
+        private Voice.IVoiceSynthesisService? _voiceSynthesisService;
+        private bool _useLive2DMode = false; // GIF/Live2D切り替えフラグ
+
+        // 音楽プレーヤー
+        private Audio.IYouTubePlayerService? _youtubePlayer;
+        private Audio.IBgmService? _bgmService;
+
+        // ウィジェットモード
+        private bool _isWidgetMode;
+        private System.Windows.Threading.DispatcherTimer? _widgetTimer;
+        private Size _normalSize;
+        private Size _widgetSize = new Size(160, 180);
 
         // 翻訳用ホットキー
         private const int TRANSLATE_HOTKEY_ID = 0xB002;
@@ -238,6 +262,7 @@ namespace AiAssistant
             // 音声入力サービス
             _voiceInputService = new VoiceInputService();
             _voiceInputService.Recognized += OnVoiceRecognized;
+            _voiceInputService.StateChanged += OnVoiceInputStateChanged;
             _voiceInputService.Error += OnVoiceError;
 
             // 音声出力サービス
@@ -258,7 +283,377 @@ namespace AiAssistant
             // スクリーンショットサービス
             _screenshotService = new ScreenshotOcrService();
 
+            // コンパニオンシップシステム初期化
+            InitializeCompanionshipSystem();
+
+            // Phase 2: Live2D/音声サービス初期化（バックグラウンドで）
+            _ = InitializeLive2DServiceAsync();
+            _ = InitializeVoiceServiceAsync();
+
+            // 音楽プレーヤー初期化
+            _ = InitializeMusicPlayerAsync();
+
             Console.WriteLine("[QuickAction] クイックアクションサービスを初期化しました");
+        }
+
+        /// <summary>
+        /// コンパニオンシップシステム（癒しペット機能）を初期化します
+        /// </summary>
+        private void InitializeCompanionshipSystem()
+        {
+            try
+            {
+                _companionshipManager = new CompanionshipManager();
+
+                // イベントを購読
+                _companionshipManager.BondService.LevelUp += OnBondLevelUp;
+                _companionshipManager.BehaviorService.AnimationChanged += OnCompanionAnimationChanged;
+                _companionshipManager.EmotionService.EmotionChanged += OnCompanionEmotionChanged;
+
+                // システムを開始
+                _companionshipManager.Start();
+
+                // アニメーションコントローラーで感情ベースモードを有効化
+                if (_animationController != null)
+                {
+                    _animationController.EmotionBasedMode = true;
+                    _animationController.SetEmotion(_companionshipManager.Context.CurrentEmotionType);
+                }
+
+                // Phase 3: キャラクター対話サービスを初期化
+                var context = _companionshipManager.Context;
+                InitializeDialogueService();
+
+                Console.WriteLine($"[Companionship] 初期化完了 - 絆Lv.{(int)context.BondLevel} ({context.BondPoints}pt), 感情: {context.Emotion.GetJapaneseName()}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Companionship] 初期化エラー: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Companionship初期化エラー: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Phase 3: キャラクター対話サービスを初期化します
+        /// </summary>
+        private void InitializeDialogueService()
+        {
+            if (_companionshipManager == null) return;
+
+            try
+            {
+                _dialogueService = new Character.CharacterDialogueService(
+                    _companionshipManager.BondService,
+                    _companionshipManager.EmotionService);
+
+                // デフォルトの性格を設定（設定から読み込む場合は後で変更可能）
+                _dialogueService.SetPersonality(Character.CharacterPersonality.CreateGentle());
+
+                // イベントを購読
+                _dialogueService.DialogueRequested += OnDialogueRequested;
+                _dialogueService.DialogueDismissed += OnDialogueDismissed;
+
+                // アイドル対話タイマーを開始（5分間隔）
+                _dialogueService.StartIdleDialogueTimer(5);
+
+                // 起動時の挨拶を表示
+                _ = _dialogueService.ShowGreetingAsync();
+
+                Console.WriteLine("[Dialogue] 対話サービス初期化完了");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Dialogue] 初期化エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 対話表示イベントハンドラ
+        /// </summary>
+        private void OnDialogueRequested(object? sender, Character.DialogueEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // キャラクター名を設定
+                DialogueCharacterName.Text = e.CharacterName;
+
+                // セリフを設定
+                DialogueText.Text = e.Text;
+
+                // バブルを表示
+                DialogueBubble.Visibility = Visibility.Visible;
+
+                // 自動消去タイマーを設定
+                if (e.DisplayDurationMs > 0)
+                {
+                    _dialogueDismissTimer?.Stop();
+                    _dialogueDismissTimer?.Dispose();
+
+                    _dialogueDismissTimer = new System.Timers.Timer(e.DisplayDurationMs);
+                    _dialogueDismissTimer.Elapsed += (s, args) =>
+                    {
+                        _dialogueDismissTimer?.Stop();
+                        Dispatcher.Invoke(() => DismissDialogueBubble());
+                    };
+                    _dialogueDismissTimer.AutoReset = false;
+                    _dialogueDismissTimer.Start();
+                }
+
+                // 音声合成が有効な場合、読み上げ
+                if (_voiceSynthesisService?.IsAvailable == true && AppSettings.Instance.Voice.Enabled)
+                {
+                    _ = _voiceSynthesisService.SpeakAsync(e.Text);
+                }
+
+                Console.WriteLine($"[Dialogue] 表示: {e.Text}");
+            });
+        }
+
+        /// <summary>
+        /// 対話終了イベントハンドラ
+        /// </summary>
+        private void OnDialogueDismissed(object? sender, EventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                DismissDialogueBubble();
+            });
+        }
+
+        /// <summary>
+        /// セリフバブルを非表示にする
+        /// </summary>
+        private void DismissDialogueBubble()
+        {
+            DialogueBubble.Visibility = Visibility.Collapsed;
+            _dialogueDismissTimer?.Stop();
+        }
+
+        /// <summary>
+        /// セリフバブルクリック時（閉じるか次へ進む）
+        /// </summary>
+        private void OnDialogueBubbleClick(object sender, MouseButtonEventArgs e)
+        {
+            // クリックで閉じる
+            _dialogueService?.DismissDialogue();
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// セリフバブル閉じるボタンクリック
+        /// </summary>
+        private void OnDialogueDismissClick(object sender, RoutedEventArgs e)
+        {
+            _dialogueService?.DismissDialogue();
+        }
+
+        /// <summary>
+        /// コンパニオンの感情変化時の処理
+        /// </summary>
+        private void OnCompanionEmotionChanged(object? sender, EmotionChangedEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // アニメーションコントローラーに感情を反映
+                _animationController?.SetEmotion(e.NewEmotion);
+
+                Console.WriteLine($"[Companionship] 感情変化: {e.PreviousEmotion} -> {e.NewEmotion} ({e.Reason})");
+            });
+        }
+
+        /// <summary>
+        /// 絆レベルアップ時の処理
+        /// </summary>
+        private void OnBondLevelUp(object? sender, BondLevelUpEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                var levelInfo = BondLevelInfo.GetInfo(e.NewLevel);
+                var message = $"🎉 絆レベルアップ！ Lv.{(int)e.NewLevel} 「{levelInfo.Name}」になりました！";
+                ShowTransientMessage(message, 4000);
+                Console.WriteLine($"[Companionship] {message}");
+            });
+        }
+
+        /// <summary>
+        /// コンパニオンアニメーション変更時の処理
+        /// </summary>
+        private void OnCompanionAnimationChanged(object? sender, AnimationChangedEventArgs e)
+        {
+            // 将来的にCharacterAnimationControllerと連携
+            // 現時点ではログ出力のみ
+            System.Diagnostics.Debug.WriteLine($"[Companionship] Animation: {e.Animation} (Priority: {e.Priority})");
+        }
+
+        /// <summary>
+        /// Live2Dサービスを初期化します（Phase 2）
+        /// </summary>
+        private async Task InitializeLive2DServiceAsync()
+        {
+            try
+            {
+                // WebView2コントロールを取得
+                var webView = FindName("Live2DWebView") as Microsoft.Web.WebView2.Wpf.WebView2;
+                if (webView == null)
+                {
+                    Console.WriteLine("[Live2D] WebView2コントロールが見つかりません");
+                    return;
+                }
+
+                _live2dService = new Live2D.WebView2Live2DService(webView);
+
+                // イベントを購読
+                _live2dService.ModelLoaded += (s, e) =>
+                {
+                    Console.WriteLine("[Live2D] モデル読み込み完了");
+                };
+
+                _live2dService.ErrorOccurred += (s, e) =>
+                {
+                    Console.WriteLine($"[Live2D] エラー: {e.Message}");
+                };
+
+                // サービスを初期化（モデルはまだ読み込まない）
+                await _live2dService.InitializeAsync();
+
+                Console.WriteLine("[Live2D] サービス初期化完了（待機中）");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Live2D] 初期化エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 音声合成サービスを初期化します（Phase 2）
+        /// </summary>
+        private async Task InitializeVoiceServiceAsync()
+        {
+            try
+            {
+                _voiceSynthesisService = new Voice.VoicevoxSynthesizer();
+
+                // リップシンクイベントをLive2Dに連携
+                _voiceSynthesisService.LipSyncUpdate += OnVoiceLipSyncUpdate;
+                _voiceSynthesisService.SpeakCompleted += (s, e) =>
+                {
+                    Console.WriteLine("[Voice] 読み上げ完了");
+                };
+                _voiceSynthesisService.ErrorOccurred += (s, e) =>
+                {
+                    Console.WriteLine($"[Voice] エラー: {e.Message}");
+                };
+
+                await _voiceSynthesisService.InitializeAsync();
+
+                if (_voiceSynthesisService.IsAvailable)
+                {
+                    Console.WriteLine($"[Voice] VOICEVOX初期化完了 - {_voiceSynthesisService.AvailableVoices.Count}話者");
+                }
+                else
+                {
+                    Console.WriteLine("[Voice] VOICEVOXが利用できません（VOICEVOXを起動してください）");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Voice] 初期化エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 音楽プレーヤーを初期化します
+        /// </summary>
+        private async Task InitializeMusicPlayerAsync()
+        {
+            try
+            {
+                // BGMサービスを初期化
+                _bgmService = new Audio.BgmService();
+                Console.WriteLine($"[Music] BGMサービス初期化完了 - {_bgmService.AvailableTracks.Count}曲");
+
+                // YouTubeプレーヤーを初期化
+                var youtubeWebView = FindName("YouTubeWebView") as Microsoft.Web.WebView2.Wpf.WebView2;
+                if (youtubeWebView != null)
+                {
+                    _youtubePlayer = new Audio.YouTubePlayerService(youtubeWebView);
+                    await _youtubePlayer.InitializeAsync();
+                    Console.WriteLine("[Music] YouTubeプレーヤー初期化完了");
+                }
+                else
+                {
+                    Console.WriteLine("[Music] YouTubeWebViewが見つかりません");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Music] 初期化エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 音声のリップシンクをLive2Dに反映
+        /// </summary>
+        private void OnVoiceLipSyncUpdate(object? sender, Voice.LipSyncEventArgs e)
+        {
+            if (_live2dService != null && _useLive2DMode)
+            {
+                _ = _live2dService.SetLipSyncAsync(e.Volume);
+            }
+        }
+
+        /// <summary>
+        /// Live2DモードとGIFモードを切り替え
+        /// </summary>
+        /// <param name="useLive2D">true=Live2D、false=GIF</param>
+        private async Task SetCharacterModeAsync(bool useLive2D)
+        {
+            _useLive2DMode = useLive2D;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                var webView = FindName("Live2DWebView") as Microsoft.Web.WebView2.Wpf.WebView2;
+                var avatarImage = FindName("AvatarImage") as System.Windows.Controls.Image;
+
+                if (useLive2D)
+                {
+                    // Live2Dモード
+                    if (webView != null) webView.Visibility = Visibility.Visible;
+                    if (avatarImage != null) avatarImage.Visibility = Visibility.Collapsed;
+
+                    // アニメーションコントローラーを停止
+                    _animationController?.Stop();
+
+                    Console.WriteLine("[Character] Live2Dモードに切り替え");
+                }
+                else
+                {
+                    // GIFモード
+                    if (webView != null) webView.Visibility = Visibility.Collapsed;
+                    if (avatarImage != null) avatarImage.Visibility = Visibility.Visible;
+
+                    // アニメーションコントローラーを再開
+                    _animationController?.Start();
+
+                    Console.WriteLine("[Character] GIFモードに切り替え");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Live2Dモデルを読み込み
+        /// </summary>
+        /// <param name="modelPath">モデルファイルのパス（.model3.json）</param>
+        public async Task LoadLive2DModelAsync(string modelPath)
+        {
+            if (_live2dService == null)
+            {
+                Console.WriteLine("[Live2D] サービスが初期化されていません");
+                return;
+            }
+
+            await _live2dService.LoadModelAsync(modelPath);
+            await SetCharacterModeAsync(true);
         }
 
         /// <summary>
@@ -456,6 +851,22 @@ namespace AiAssistant
             (_gmailService as IDisposable)?.Dispose();
             (_currencyService as IDisposable)?.Dispose();
             _claudeUsageService?.Dispose();
+
+            // コンパニオンシップシステムをクリーンアップ
+            _companionshipManager?.Dispose();
+
+            // Phase 3: 対話サービスをクリーンアップ
+            _dialogueDismissTimer?.Stop();
+            _dialogueDismissTimer?.Dispose();
+            _dialogueService?.Dispose();
+
+            // Phase 2: Live2D/音声サービスをクリーンアップ
+            _live2dService?.Dispose();
+            _voiceSynthesisService?.Dispose();
+
+            // 音楽サービスをクリーンアップ
+            _youtubePlayer?.Dispose();
+            _bgmService?.Dispose();
         }
 
         // 閉じるボタン
@@ -786,6 +1197,9 @@ namespace AiAssistant
 
             // 履歴に保存
             _chatHistoryService?.AddMessage("user", message);
+
+            // コンパニオンシップ：ユーザーとの交流を記録
+            _companionshipManager?.RecordInteraction();
 
             // AIレスポンスを取得（ストリーミング）
             var responseTextBlock = AddChatMessage("入力中...", isUser: false);
@@ -4059,6 +4473,12 @@ namespace AiAssistant
                 : "☕ 休憩終了！作業を再開しましょう。";
 
             OpenChatAndShowMessage(message);
+
+            // コンパニオンシップ：ポモドーロ完了を記録（作業セッションのみ）
+            if (e.WasWorkSession)
+            {
+                _companionshipManager?.RecordPomodoroComplete();
+            }
         }
 
         /// <summary>
@@ -4238,15 +4658,29 @@ namespace AiAssistant
         /// </summary>
         private void OnVoiceRecognized(object? sender, VoiceRecognizedEventArgs e)
         {
-            // 認識されたテキストを入力欄に設定
-            ChatInputBox.Text = e.Text;
-            ShowTransientMessage($"🎤 認識完了 (信頼度: {e.Confidence:P0})", 2000);
-
-            // 信頼度が高ければ自動送信
-            if (e.Confidence >= 0.8f)
+            Dispatcher.Invoke(() =>
             {
-                OnSendMessageClick(this, new RoutedEventArgs());
-            }
+                // 認識されたテキストを入力欄に設定
+                ChatInputBox.Text = e.Text;
+                ShowTransientMessage($"🎤 認識完了 (信頼度: {e.Confidence:P0})", 2000);
+
+                // ボタン状態をリセット
+                UpdateVoiceInputButtonState(VoiceInputState.Stopped);
+
+                // 信頼度が高ければ自動送信
+                if (e.Confidence >= 0.8f)
+                {
+                    OnSendMessageClick(this, new RoutedEventArgs());
+                }
+            });
+        }
+
+        /// <summary>
+        /// 音声入力の状態が変化したときに呼び出されます
+        /// </summary>
+        private void OnVoiceInputStateChanged(object? sender, VoiceInputState state)
+        {
+            UpdateVoiceInputButtonState(state);
         }
 
         /// <summary>
@@ -4254,7 +4688,65 @@ namespace AiAssistant
         /// </summary>
         private void OnVoiceError(object? sender, string error)
         {
-            ShowTransientMessage($"⚠️ {error}", 3000);
+            Dispatcher.Invoke(() =>
+            {
+                ShowTransientMessage($"⚠️ {error}", 3000);
+                UpdateVoiceInputButtonState(VoiceInputState.Stopped);
+            });
+        }
+
+        /// <summary>
+        /// 音声入力ボタンがクリックされたときに呼び出されます
+        /// </summary>
+        private void OnVoiceInputButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (_voiceInputService == null || !_voiceInputService.IsAvailable)
+            {
+                ShowTransientMessage("音声認識が利用できません", 2000);
+                return;
+            }
+
+            // 既に聞いている場合は停止
+            if (_voiceInputService.State == VoiceInputState.Listening)
+            {
+                _voiceInputService.StopListening();
+                UpdateVoiceInputButtonState(VoiceInputState.Stopped);
+                ShowTransientMessage("音声入力をキャンセルしました", 1500);
+                return;
+            }
+
+            // 音声入力を開始
+            _voiceInputService.StartListening();
+            UpdateVoiceInputButtonState(VoiceInputState.Listening);
+            ShowTransientMessage("🎤 話してください...", 10000);
+        }
+
+        /// <summary>
+        /// 音声入力ボタンの見た目を更新します
+        /// </summary>
+        private void UpdateVoiceInputButtonState(VoiceInputState state)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                switch (state)
+                {
+                    case VoiceInputState.Listening:
+                        VoiceInputButtonBorder.Background = new SolidColorBrush(Color.FromRgb(244, 67, 54)); // 赤 - 録音中
+                        VoiceInputButton.Content = "🔴";
+                        VoiceInputButton.ToolTip = "クリックで停止";
+                        break;
+                    case VoiceInputState.Processing:
+                        VoiceInputButtonBorder.Background = new SolidColorBrush(Color.FromRgb(255, 152, 0)); // オレンジ - 処理中
+                        VoiceInputButton.Content = "⏳";
+                        VoiceInputButton.ToolTip = "処理中...";
+                        break;
+                    default:
+                        VoiceInputButtonBorder.Background = new SolidColorBrush(Color.FromRgb(156, 39, 176)); // 紫 - 待機
+                        VoiceInputButton.Content = "🎤";
+                        VoiceInputButton.ToolTip = "音声入力";
+                        break;
+                }
+            });
         }
 
         /// <summary>
@@ -4546,6 +5038,12 @@ namespace AiAssistant
                         _dailyGoalsService.ToggleGoal(goalId);
                         var newState = _dailyGoalsService.Goals.FirstOrDefault(g => g.Id == goalId)?.IsCompleted ?? false;
                         ShowTransientMessage(newState ? "✅ 完了！" : "⬜ 未完了に戻しました", 1500);
+
+                        // コンパニオンシップ：ゴール達成を記録（完了時のみ）
+                        if (newState)
+                        {
+                            _companionshipManager?.RecordGoalAchieved();
+                        }
                     };
 
                     contextMenu.Items.Add(goalItem);
@@ -4693,6 +5191,317 @@ namespace AiAssistant
             {
                 ShowTransientMessage($"エラー: {ex.Message}", 2000);
             }
+        }
+
+        #endregion
+
+        #region Music Player Handlers
+
+        /// <summary>
+        /// 音楽ボタンクリック - ポップアップを開閉
+        /// </summary>
+        private void OnMusicButtonClick(object sender, RoutedEventArgs e)
+        {
+            MusicPlayerPopup.Visibility = MusicPlayerPopup.Visibility == Visibility.Visible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
+        /// <summary>
+        /// 音楽プレーヤーポップアップを閉じる
+        /// </summary>
+        private void OnCloseMusicPlayerClick(object sender, RoutedEventArgs e)
+        {
+            MusicPlayerPopup.Visibility = Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Lo-Fi再生ボタンクリック
+        /// </summary>
+        private async void OnLofiPlayClick(object sender, RoutedEventArgs e)
+        {
+            if (_youtubePlayer == null)
+            {
+                ShowTransientMessage("音楽プレーヤーが初期化されていません", 2000);
+                return;
+            }
+
+            try
+            {
+                await _youtubePlayer.PlayLofiAsync();
+                ShowTransientMessage("Lofi Girl を再生中...", 2000);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Music] Lo-Fi再生エラー: {ex.Message}");
+                ShowTransientMessage("再生に失敗しました", 2000);
+            }
+        }
+
+        /// <summary>
+        /// 音楽停止ボタンクリック
+        /// </summary>
+        private async void OnMusicStopClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // YouTubeを停止
+                if (_youtubePlayer?.IsPlaying == true)
+                {
+                    await _youtubePlayer.StopAsync();
+                }
+
+                // BGMを停止
+                if (_bgmService?.IsPlaying == true)
+                {
+                    _bgmService.Stop();
+                }
+
+                ShowTransientMessage("停止しました", 1500);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Music] 停止エラー: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 音量スライダー変更
+        /// </summary>
+        private async void OnMusicVolumeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            var volume = (int)e.NewValue;
+
+            try
+            {
+                // YouTubeの音量を設定
+                if (_youtubePlayer != null)
+                {
+                    await _youtubePlayer.SetVolumeAsync(volume);
+                }
+
+                // BGMの音量を設定
+                if (_bgmService != null)
+                {
+                    _bgmService.Volume = volume / 100f;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Music] 音量設定エラー: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region Widget Mode Handlers
+
+        /// <summary>
+        /// ウィジェットモードボタンクリック
+        /// </summary>
+        private void OnWidgetModeButtonClick(object sender, RoutedEventArgs e)
+        {
+            EnterWidgetMode();
+        }
+
+        /// <summary>
+        /// ウィジェットモードから通常モードに戻る
+        /// </summary>
+        private void OnExpandFromWidgetClick(object sender, RoutedEventArgs e)
+        {
+            ExitWidgetMode();
+        }
+
+        /// <summary>
+        /// ウィジェットモードに入る
+        /// </summary>
+        private void EnterWidgetMode()
+        {
+            if (_isWidgetMode) return;
+
+            _isWidgetMode = true;
+
+            // 現在のサイズを保存
+            _normalSize = new Size(Width, Height);
+
+            // 通常のUIを非表示
+            CharacterBorder.Visibility = Visibility.Collapsed;
+            ChatBalloon.Visibility = Visibility.Collapsed;
+            MusicPlayerPopup.Visibility = Visibility.Collapsed;
+            PetSelectorPopup.Visibility = Visibility.Collapsed;
+            DialogueBubble.Visibility = Visibility.Collapsed;
+
+            // 右側のボタンパネルを非表示（上部のボタンは残す）
+            var quickActionsPanel = FindName("WidgetModeButton")?.GetType().DeclaringType;
+
+            // ウィジェットパネルを表示
+            WidgetPanel.Visibility = Visibility.Visible;
+
+            // ウィンドウサイズを縮小
+            Width = _widgetSize.Width;
+            Height = _widgetSize.Height;
+
+            // 時計タイマーを開始
+            StartWidgetTimer();
+
+            // ウィジェット情報を更新
+            UpdateWidgetInfo();
+
+            Console.WriteLine("[Widget] ウィジェットモードに切り替え");
+        }
+
+        /// <summary>
+        /// ウィジェットモードから抜ける
+        /// </summary>
+        private void ExitWidgetMode()
+        {
+            if (!_isWidgetMode) return;
+
+            _isWidgetMode = false;
+
+            // 時計タイマーを停止
+            StopWidgetTimer();
+
+            // ウィジェットパネルを非表示
+            WidgetPanel.Visibility = Visibility.Collapsed;
+
+            // 通常のUIを復元
+            CharacterBorder.Visibility = Visibility.Visible;
+
+            // ウィンドウサイズを復元
+            Width = _normalSize.Width;
+            Height = _normalSize.Height;
+
+            Console.WriteLine("[Widget] 通常モードに切り替え");
+        }
+
+        /// <summary>
+        /// ウィジェットタイマーを開始
+        /// </summary>
+        private void StartWidgetTimer()
+        {
+            _widgetTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _widgetTimer.Tick += OnWidgetTimerTick;
+            _widgetTimer.Start();
+        }
+
+        /// <summary>
+        /// ウィジェットタイマーを停止
+        /// </summary>
+        private void StopWidgetTimer()
+        {
+            _widgetTimer?.Stop();
+            _widgetTimer = null;
+        }
+
+        /// <summary>
+        /// ウィジェットタイマーのティック
+        /// </summary>
+        private void OnWidgetTimerTick(object? sender, EventArgs e)
+        {
+            UpdateWidgetTime();
+        }
+
+        /// <summary>
+        /// ウィジェットの時刻を更新
+        /// </summary>
+        private void UpdateWidgetTime()
+        {
+            var now = DateTime.Now;
+            WidgetTimeText.Text = now.ToString("HH:mm");
+            WidgetDateText.Text = now.ToString("M/d (ddd)");
+        }
+
+        /// <summary>
+        /// ウィジェット情報を更新
+        /// </summary>
+        private void UpdateWidgetInfo()
+        {
+            // 時刻を更新
+            UpdateWidgetTime();
+
+            // 音楽ステータスを更新
+            if (_youtubePlayer?.IsPlaying == true)
+            {
+                WidgetMusicPanel.Visibility = Visibility.Visible;
+                WidgetMusicText.Text = _youtubePlayer.CurrentTitle ?? "再生中";
+            }
+            else if (_bgmService?.IsPlaying == true)
+            {
+                WidgetMusicPanel.Visibility = Visibility.Visible;
+                WidgetMusicText.Text = _bgmService.CurrentTrack?.Name ?? "再生中";
+            }
+            else
+            {
+                WidgetMusicPanel.Visibility = Visibility.Collapsed;
+            }
+
+            // ポモドーロステータスを更新
+            if (_pomodoroService != null &&
+                (_pomodoroService.State == PomodoroState.Working ||
+                 _pomodoroService.State == PomodoroState.ShortBreak ||
+                 _pomodoroService.State == PomodoroState.LongBreak))
+            {
+                WidgetPomodoroPanel.Visibility = Visibility.Visible;
+                var remaining = _pomodoroService.RemainingTime;
+                WidgetPomodoroText.Text = $"{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+            }
+            else
+            {
+                WidgetPomodoroPanel.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>
+        /// ウィジェットのチャットボタンクリック
+        /// </summary>
+        private void OnWidgetChatClick(object sender, RoutedEventArgs e)
+        {
+            ExitWidgetMode();
+            _isChatOpen = true;
+            ChatBalloon.Visibility = Visibility.Visible;
+            ChatInputBox.Focus();
+        }
+
+        /// <summary>
+        /// ウィジェットの音楽ボタンクリック
+        /// </summary>
+        private void OnWidgetMusicClick(object sender, RoutedEventArgs e)
+        {
+            ExitWidgetMode();
+            MusicPlayerPopup.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>
+        /// ウィジェットのポモドーロボタンクリック
+        /// </summary>
+        private void OnWidgetPomodoroClick(object sender, RoutedEventArgs e)
+        {
+            // ポモドーロをトグル
+            if (_pomodoroService == null) return;
+
+            var state = _pomodoroService.State;
+
+            if (state == PomodoroState.Working || state == PomodoroState.ShortBreak || state == PomodoroState.LongBreak)
+            {
+                _pomodoroService.Pause();
+                ShowTransientMessage("🍅 ポモドーロを一時停止", 2000);
+            }
+            else if (state == PomodoroState.Paused)
+            {
+                _pomodoroService.Resume();
+                ShowTransientMessage("🍅 ポモドーロを再開", 2000);
+            }
+            else
+            {
+                _pomodoroService.StartWork();
+                ShowTransientMessage("🍅 ポモドーロ開始！", 2000);
+            }
+
+            UpdateWidgetInfo();
         }
 
         #endregion

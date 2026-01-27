@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live2D Renderer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            background: transparent !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="live2d-canvas"></canvas>
+    </div>
+
+    <!-- PIXI.js -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
+    <!-- pixi-live2d-display -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/index.min.js"></script>
+    <!-- Live2D Cubism Core (必須) -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display@0.4.0/dist/cubism4.min.js"></script>
+
+    <script>
+        // Live2D Renderer クラス
+        class Live2DRenderer {
+            constructor() {
+                this.app = null;
+                this.model = null;
+                this.isInitialized = false;
+                this.isModelLoaded = false;
+            }
+
+            async initialize() {
+                if (this.isInitialized) return;
+
+                const canvas = document.getElementById('live2d-canvas');
+                const container = document.getElementById('canvas-container');
+
+                this.app = new PIXI.Application({
+                    view: canvas,
+                    width: container.clientWidth,
+                    height: container.clientHeight,
+                    backgroundAlpha: 0,
+                    resolution: window.devicePixelRatio || 1,
+                    autoDensity: true,
+                    antialias: true
+                });
+
+                // リサイズ対応
+                window.addEventListener('resize', () => this.onResize());
+
+                this.isInitialized = true;
+                this.notifyHost('initialized', {});
+            }
+
+            onResize() {
+                if (!this.app) return;
+
+                const container = document.getElementById('canvas-container');
+                this.app.renderer.resize(container.clientWidth, container.clientHeight);
+
+                if (this.model) {
+                    this.centerModel();
+                }
+            }
+
+            async loadModel(modelPath) {
+                try {
+                    if (!this.isInitialized) {
+                        await this.initialize();
+                    }
+
+                    // 既存モデルをアンロード
+                    if (this.model) {
+                        this.app.stage.removeChild(this.model);
+                        this.model.destroy();
+                        this.model = null;
+                    }
+
+                    // Live2Dモデルを読み込み
+                    this.model = await PIXI.live2d.Live2DModel.from(modelPath);
+
+                    // ステージに追加
+                    this.app.stage.addChild(this.model);
+
+                    // モデルを中央に配置
+                    this.centerModel();
+
+                    // インタラクション設定
+                    this.model.interactive = true;
+                    this.model.on('hit', (hitAreas) => {
+                        this.notifyHost('hit', { areas: hitAreas });
+                    });
+
+                    // モーション完了イベント
+                    this.model.internalModel.motionManager.on('motionFinish', () => {
+                        this.notifyHost('motionFinished', {});
+                    });
+
+                    this.isModelLoaded = true;
+                    this.notifyHost('modelLoaded', { path: modelPath });
+
+                } catch (error) {
+                    console.error('Failed to load model:', error);
+                    this.notifyHost('error', { message: error.message });
+                }
+            }
+
+            centerModel() {
+                if (!this.model || !this.app) return;
+
+                // モデルのスケールを調整
+                const scale = Math.min(
+                    this.app.screen.width / this.model.width,
+                    this.app.screen.height / this.model.height
+                ) * 0.8;
+
+                this.model.scale.set(scale);
+
+                // 中央に配置
+                this.model.x = this.app.screen.width / 2;
+                this.model.y = this.app.screen.height / 2;
+
+                // アンカーを中央に
+                this.model.anchor.set(0.5, 0.5);
+            }
+
+            unloadModel() {
+                if (this.model) {
+                    this.app.stage.removeChild(this.model);
+                    this.model.destroy();
+                    this.model = null;
+                    this.isModelLoaded = false;
+                    this.notifyHost('modelUnloaded', {});
+                }
+            }
+
+            setExpression(expressionName) {
+                if (!this.model) return;
+
+                try {
+                    this.model.expression(expressionName);
+                    this.notifyHost('expressionSet', { name: expressionName });
+                } catch (error) {
+                    console.warn('Failed to set expression:', error);
+                }
+            }
+
+            playMotion(group, index = 0, priority = 1) {
+                if (!this.model) return;
+
+                try {
+                    this.model.motion(group, index, priority);
+                    this.notifyHost('motionStarted', { group, index, priority });
+                } catch (error) {
+                    console.warn('Failed to play motion:', error);
+                }
+            }
+
+            setLipSync(value) {
+                if (!this.model) return;
+
+                try {
+                    const coreModel = this.model.internalModel.coreModel;
+                    coreModel.setParameterValueById('ParamMouthOpenY', value);
+                } catch (error) {
+                    // パラメータが存在しない場合は無視
+                }
+            }
+
+            setLookAt(x, y) {
+                if (!this.model) return;
+
+                try {
+                    // -1 to 1 の範囲を -30 to 30 度に変換
+                    const angleX = x * 30;
+                    const angleY = y * -30; // Y軸は反転
+
+                    const coreModel = this.model.internalModel.coreModel;
+                    coreModel.setParameterValueById('ParamAngleX', angleX);
+                    coreModel.setParameterValueById('ParamAngleY', angleY);
+                    coreModel.setParameterValueById('ParamBodyAngleX', angleX * 0.3);
+                    coreModel.setParameterValueById('ParamEyeBallX', x);
+                    coreModel.setParameterValueById('ParamEyeBallY', y);
+                } catch (error) {
+                    // パラメータが存在しない場合は無視
+                }
+            }
+
+            setParameter(paramId, value) {
+                if (!this.model) return;
+
+                try {
+                    const coreModel = this.model.internalModel.coreModel;
+                    coreModel.setParameterValueById(paramId, value);
+                } catch (error) {
+                    console.warn(`Failed to set parameter ${paramId}:`, error);
+                }
+            }
+
+            setVisibility(visible) {
+                if (!this.model) return;
+                this.model.visible = visible;
+            }
+
+            setScale(scale) {
+                if (!this.model) return;
+                this.model.scale.set(scale);
+            }
+
+            setPosition(x, y) {
+                if (!this.model) return;
+                this.model.x = x;
+                this.model.y = y;
+            }
+
+            // ホスト（C#）に通知
+            notifyHost(eventType, data) {
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({
+                        type: eventType,
+                        data: data
+                    });
+                }
+            }
+        }
+
+        // グローバルインスタンス
+        const renderer = new Live2DRenderer();
+
+        // C#から呼び出すためのグローバル関数
+        window.live2d = {
+            initialize: () => renderer.initialize(),
+            loadModel: (path) => renderer.loadModel(path),
+            unloadModel: () => renderer.unloadModel(),
+            setExpression: (name) => renderer.setExpression(name),
+            playMotion: (group, index, priority) => renderer.playMotion(group, index, priority),
+            setLipSync: (value) => renderer.setLipSync(value),
+            setLookAt: (x, y) => renderer.setLookAt(x, y),
+            setParameter: (paramId, value) => renderer.setParameter(paramId, value),
+            setVisibility: (visible) => renderer.setVisibility(visible),
+            setScale: (scale) => renderer.setScale(scale),
+            setPosition: (x, y) => renderer.setPosition(x, y)
+        };
+
+        // 自動初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            renderer.initialize();
+        });
+    </script>
+</body>
+</html>

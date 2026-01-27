@@ -57,6 +57,12 @@ namespace AiAssistant
         [JsonPropertyName("Slack")]
         public SlackSettings Slack { get; set; } = new();
 
+        [JsonPropertyName("Live2D")]
+        public Live2DSettings Live2D { get; set; } = new();
+
+        [JsonPropertyName("Voice")]
+        public VoiceSettings Voice { get; set; } = new();
+
         /// <summary>
         /// シングルトンインスタンスを取得
         /// </summary>
@@ -510,5 +516,63 @@ namespace AiAssistant
         /// </summary>
         public bool IsConfigured => !string.IsNullOrWhiteSpace(UserToken) &&
                                    UserToken.StartsWith("xoxp-");
+    }
+
+    /// <summary>
+    /// Live2D設定（Phase 2）
+    /// </summary>
+    public sealed class Live2DSettings
+    {
+        [JsonPropertyName("Enabled")]
+        public bool Enabled { get; set; } = false;
+
+        [JsonPropertyName("ModelPath")]
+        public string ModelPath { get; set; } = string.Empty;
+
+        [JsonPropertyName("Scale")]
+        public double Scale { get; set; } = 1.0;
+
+        [JsonPropertyName("PositionX")]
+        public double PositionX { get; set; } = 0;
+
+        [JsonPropertyName("PositionY")]
+        public double PositionY { get; set; } = 0;
+
+        /// <summary>
+        /// モデルが設定されているかどうか
+        /// </summary>
+        public bool HasModel => !string.IsNullOrWhiteSpace(ModelPath) && File.Exists(ModelPath);
+    }
+
+    /// <summary>
+    /// 音声合成設定（Phase 2）
+    /// </summary>
+    public sealed class VoiceSettings
+    {
+        [JsonPropertyName("Enabled")]
+        public bool Enabled { get; set; } = false;
+
+        [JsonPropertyName("Provider")]
+        public string Provider { get; set; } = "Voicevox"; // Voicevox, WindowsTts
+
+        [JsonPropertyName("VoicevoxEndpoint")]
+        public string VoicevoxEndpoint { get; set; } = "http://localhost:50021";
+
+        [JsonPropertyName("SpeakerId")]
+        public int SpeakerId { get; set; } = 0;
+
+        [JsonPropertyName("SpeakerName")]
+        public string SpeakerName { get; set; } = string.Empty;
+
+        [JsonPropertyName("Volume")]
+        public double Volume { get; set; } = 1.0;
+
+        [JsonPropertyName("Speed")]
+        public double Speed { get; set; } = 1.0;
+
+        /// <summary>
+        /// VOICEVOXを使用するかどうか
+        /// </summary>
+        public bool UseVoicevox => Enabled && Provider.Equals("Voicevox", StringComparison.OrdinalIgnoreCase);
     }
 }

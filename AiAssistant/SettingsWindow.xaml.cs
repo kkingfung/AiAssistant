@@ -1,6 +1,8 @@
 using System;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace AiAssistant
 {
@@ -63,6 +65,18 @@ namespace AiAssistant
             var historySettings = ChatHistorySettings.Load();
             SaveHistoryCheckBox.IsChecked = historySettings.SaveHistory;
             MaxHistoryTextBox.Text = historySettings.MaxMessages.ToString();
+
+            // Live2D設定
+            Live2DEnabledCheckBox.IsChecked = _settings.Live2D.Enabled;
+            Live2DModelPathTextBox.Text = _settings.Live2D.ModelPath;
+            Live2DScaleTextBox.Text = _settings.Live2D.Scale.ToString(CultureInfo.InvariantCulture);
+
+            // 音声合成設定
+            VoiceEnabledCheckBox.IsChecked = _settings.Voice.Enabled;
+            VoicevoxEndpointTextBox.Text = _settings.Voice.VoicevoxEndpoint;
+            VoiceSpeakerIdTextBox.Text = _settings.Voice.SpeakerId.ToString();
+            VoiceVolumeTextBox.Text = _settings.Voice.Volume.ToString(CultureInfo.InvariantCulture);
+            VoiceSpeedTextBox.Text = _settings.Voice.Speed.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>
@@ -104,6 +118,30 @@ namespace AiAssistant
             if (double.TryParse(WeatherLonTextBox.Text, out double lon))
             {
                 _settings.Weather.Longitude = lon;
+            }
+
+            // Live2D設定
+            _settings.Live2D.Enabled = Live2DEnabledCheckBox.IsChecked ?? false;
+            _settings.Live2D.ModelPath = Live2DModelPathTextBox.Text.Trim();
+            if (double.TryParse(Live2DScaleTextBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double scale) && scale >= 0.1 && scale <= 3.0)
+            {
+                _settings.Live2D.Scale = scale;
+            }
+
+            // 音声合成設定
+            _settings.Voice.Enabled = VoiceEnabledCheckBox.IsChecked ?? false;
+            _settings.Voice.VoicevoxEndpoint = VoicevoxEndpointTextBox.Text.Trim();
+            if (int.TryParse(VoiceSpeakerIdTextBox.Text, out int speakerId) && speakerId >= 0)
+            {
+                _settings.Voice.SpeakerId = speakerId;
+            }
+            if (double.TryParse(VoiceVolumeTextBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double volume) && volume >= 0.0 && volume <= 2.0)
+            {
+                _settings.Voice.Volume = volume;
+            }
+            if (double.TryParse(VoiceSpeedTextBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double speed) && speed >= 0.5 && speed <= 2.0)
+            {
+                _settings.Voice.Speed = speed;
             }
 
             // 設定ファイルを保存
@@ -230,6 +268,24 @@ namespace AiAssistant
                 {
                     MessageBox.Show($"履歴の削除に失敗しました。\n{ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Live2Dモデルファイル参照ボタンクリック
+        /// </summary>
+        private void OnLive2DBrowseClick(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Live2Dモデルファイルを選択",
+                Filter = "Live2Dモデル (*.model3.json)|*.model3.json|すべてのファイル (*.*)|*.*",
+                CheckFileExists = true
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                Live2DModelPathTextBox.Text = dialog.FileName;
             }
         }
     }

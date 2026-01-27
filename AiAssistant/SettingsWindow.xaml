@@ -164,6 +164,59 @@
                         HorizontalAlignment="Left"
                         Click="OnClearHistoryClick"/>
 
+                <!-- Live2D設定 (Phase 2) -->
+                <TextBlock Text="🎭 Live2D設定" Style="{StaticResource SectionHeader}"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="有効:" Style="{StaticResource SettingLabel}"/>
+                    <CheckBox x:Name="Live2DEnabledCheckBox" VerticalAlignment="Center"/>
+                    <TextBlock Text="(要Live2Dモデルファイル)" FontSize="10" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="モデルパス:" Style="{StaticResource SettingLabel}"/>
+                    <TextBox x:Name="Live2DModelPathTextBox" Width="250" Style="{StaticResource SettingTextBox}"/>
+                    <Button x:Name="Live2DBrowseButton" Content="..." Width="30" Height="28" Margin="4,0,0,0" Click="OnLive2DBrowseClick"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="スケール:" Style="{StaticResource SettingLabel}"/>
+                    <TextBox x:Name="Live2DScaleTextBox" Width="80" Style="{StaticResource SettingTextBox}"/>
+                    <TextBlock Text="(0.1 - 3.0)" FontSize="10" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- 音声合成設定 (Phase 2) -->
+                <TextBlock Text="🔊 音声合成設定 (VOICEVOX)" Style="{StaticResource SectionHeader}"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="有効:" Style="{StaticResource SettingLabel}"/>
+                    <CheckBox x:Name="VoiceEnabledCheckBox" VerticalAlignment="Center"/>
+                    <TextBlock Text="(要VOICEVOX起動)" FontSize="10" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="エンドポイント:" Style="{StaticResource SettingLabel}"/>
+                    <TextBox x:Name="VoicevoxEndpointTextBox" Width="250" Style="{StaticResource SettingTextBox}"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="話者ID:" Style="{StaticResource SettingLabel}"/>
+                    <TextBox x:Name="VoiceSpeakerIdTextBox" Width="80" Style="{StaticResource SettingTextBox}"/>
+                    <TextBlock Text="(VOICEVOXのスタイルID)" FontSize="10" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="音量:" Style="{StaticResource SettingLabel}"/>
+                    <TextBox x:Name="VoiceVolumeTextBox" Width="80" Style="{StaticResource SettingTextBox}"/>
+                    <TextBlock Text="(0.0 - 2.0)" FontSize="10" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4">
+                    <TextBlock Text="速度:" Style="{StaticResource SettingLabel}"/>
+                    <TextBox x:Name="VoiceSpeedTextBox" Width="80" Style="{StaticResource SettingTextBox}"/>
+                    <TextBlock Text="(0.5 - 2.0)" FontSize="10" Foreground="Gray" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+
                 <Separator Margin="0,16,0,8"/>
 
             </StackPanel>
